@@ -1,4 +1,6 @@
-# Raydiance 1.5.0
+# Raydiance 1.5.2
+
+1.5.2 adds an optional **Direct settings** button on the Integration page, using the installed mod's NeoForge configuration factory. Direct saves independently; returning preserves the pending Raydiance preview. F8 now opens the menu only from gameplay, avoiding nested menus while editing. These changes were compiled and packaged without running tests or launching the game.
 
 Independent visual mod for Minecraft Java 1.21.1 / NeoForge 21.1.265, Java 21.
 OpenGL effects, dynamic profiles and the settings interface work without Direct.
@@ -133,7 +135,7 @@ across launches, and a local test world rendered with advanced effects enabled. 
 long-session testing, GPU benchmarks or broad mod compatibility testing. Full off-screen/cascaded shadows,
 arbitrary shaderpack pass graphs and Iris compatibility remain unimplemented.
 
-Output: `build/libs/raydiance-1.4.0.jar`.
+Output: `build/libs/raydiance-1.5.2.jar`.
 
 ## Format 2: ordered post passes
 

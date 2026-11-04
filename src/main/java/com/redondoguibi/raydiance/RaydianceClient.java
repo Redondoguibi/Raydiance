@@ -36,7 +36,10 @@ public final class RaydianceClient {
             DynamicProfiles.tick();
             TerrainEffects.tick();
             if(Minecraft.getInstance().level==null)VisualPostProcessor.idle();
-            while(MENU.consumeClick()) Minecraft.getInstance().setScreen(new RaydianceScreen(Minecraft.getInstance().screen));
+            while(MENU.consumeClick()) {
+                var minecraft = Minecraft.getInstance();
+                if (minecraft.screen == null) minecraft.setScreen(new RaydianceScreen(null));
+            }
         });
         NeoForge.EVENT_BUS.addListener(RaydianceCommands::register);
         NeoForge.EVENT_BUS.addListener(DirectShaderBridge::onTick);

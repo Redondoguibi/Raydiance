@@ -133,5 +133,8 @@
   "raydiance.help.materialSpecular": "Sun highlights by Direct material classification. Requires compatible DX12 Terrain integration. No external PBR maps. May use a more expensive lighting variant.",
   "raydiance.help.materialWetness": "Rain darkens and glosses upward-facing skylit surfaces. Requires Direct integration. Does not simulate puddles.",
   "raydiance.help.materialEmissive": "Preserves classified emissive surface colors in darkness. Requires Direct integration. Does not light neighboring blocks or replace bloom.",
-  "raydiance.help.waterAbsorption": "Water color and opacity by depth. Requires compatible Direct translucent rendering. May add depth snapshots and transfers."
+  "raydiance.help.waterAbsorption": "Water color and opacity by depth. Requires compatible Direct translucent rendering. May add depth snapshots and transfers.",
+  "raydiance.ui.Direct settings": "Direct settings",
+  "raydiance.help.Direct settings": "Open the Direct terrain dashboard. Direct saves separately; your pending Raydiance edits are kept.",
+  "raydiance.ui.finishDirectNavigation": "Use Save or Cancel to finish this screen and return to the previous settings."
 }

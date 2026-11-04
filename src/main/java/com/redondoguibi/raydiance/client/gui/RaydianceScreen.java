@@ -11,6 +11,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.Util;
 import net.neoforged.neoforge.common.ModConfigSpec.*;
+import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import java.util.*;
 
 /** Paginated controls stay usable at the minimum supported GUI resolution. */
@@ -74,7 +76,12 @@ public final class RaydianceScreen extends Screen {
         }
         if(page==4){toggle("Direct DX12 integration",Config.ENABLE_DIRECT_INTEGRATION,x,y,300);
             button("HLSL: "+Config.DIRECT_SHADER.get(),x,y+25,300,()->{try{var all=new ArrayList<String>();all.add("none");all.addAll(ShaderPackFiles.list());ShaderPackFiles.select(all.get((all.indexOf(Config.DIRECT_SHADER.get())+1)%all.size()));DirectShaderBridge.refresh();rebuildWidgets();}catch(Exception ex){message=ex.getMessage();}});
-            button("Install HLSL example",x,y+50,300,()->{try{ShaderPackFiles.installExample();message="Installed softwarm.hlsl";}catch(Exception ex){message=ex.getMessage();}});
+            button("Install HLSL example",x,y+50,146,()->{try{ShaderPackFiles.installExample();message="Installed softwarm.hlsl";}catch(Exception ex){message=ex.getMessage();}});
+            var direct=button("Direct settings",x+154,y+50,146,()->ModList.get().getModContainerById("direct").ifPresent(mod->mod.getCustomExtension(IConfigScreenFactory.class).ifPresent(factory->minecraft.setScreen(factory.createScreen(mod,this)))));
+            direct.active=ModList.get().getModContainerById("direct").flatMap(mod->mod.getCustomExtension(IConfigScreenFactory.class)).isPresent();
+            if(parent!=null&&parent.getClass().getName().equals("com.redondoguibi.direct.DirectScreen")){
+                direct.active=false;direct.setTooltip(Tooltip.create(Component.translatable("raydiance.ui.finishDirectNavigation")));
+            }
             button("Reload DX12 pass",x,y+75,300,()->DirectShaderBridge.refresh());
             slider("Detalhe DX12",Config.DIRECT_DETAIL,0,1,x,y+100,300);
         }

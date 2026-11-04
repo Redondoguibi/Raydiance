@@ -177,5 +177,8 @@
   "raydiance.ui.packGuide": "Os controles abaixo pertencem ao shaderpack. Os controles gerais do Raydiance ficam nas outras páginas. Presets podem alterar ambos. Concluir volta à tela principal; Salvar alterações grava no disco.",
   "raydiance.ui.default": "Padrão: %s • intervalo: %s a %s",
   "raydiance.ui.presetTip": "Alterna os presets do pack e aplica uma prévia imediatamente. Também pode alterar efeitos gerais, qualidade e FXAA. Concluir retorna; Salvar alterações confirma.",
-  "raydiance.ui.resetTip": "Restaura todas as categorias deste pack e seus valores gerais, qualidade equilibrada e FXAA desligado. A mudança continua sendo uma prévia até salvar na tela principal."
+  "raydiance.ui.resetTip": "Restaura todas as categorias deste pack e seus valores gerais, qualidade equilibrada e FXAA desligado. A mudança continua sendo uma prévia até salvar na tela principal.",
+  "raydiance.ui.Direct settings": "Configurar Direct",
+  "raydiance.help.Direct settings": "Abre o painel de terreno Direct. O Direct salva separadamente; suas edições pendentes do Raydiance são mantidas.",
+  "raydiance.ui.finishDirectNavigation": "Use Salvar ou Cancelar para concluir esta tela e voltar às configurações anteriores."
 }
