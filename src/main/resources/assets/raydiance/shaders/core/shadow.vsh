@@ -1,0 +1,6 @@
+#version 150
+in vec3 Position;in vec2 UV0;
+uniform mat4 ModelViewMat,ProjMat;
+uniform vec3 ChunkOffset;
+out vec2 texCoord0;
+void main(){gl_Position=ProjMat*ModelViewMat*vec4(Position+ChunkOffset,1);texCoord0=UV0;}

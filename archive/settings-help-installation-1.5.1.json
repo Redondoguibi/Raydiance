@@ -1,0 +1,15 @@
+{
+  "version": "1.5.1",
+  "jar": "C:\\Users\\Sistemas\\curseforge\\minecraft\\Instances\\Direct\\mods\\raydiance-1.5.1.jar",
+  "sha256": "e62c49ccb6f9c98821ffeccc4898040035646e04f5716af4d201c0c5efc95ed2",
+  "backup": "C:\\Criando Mods\\mod\\Direct Group\\Raydiance\\archive\\modpack-before-settings-1.5.1-20261104-171644.zip",
+  "personalSettingsPreserved": true,
+  "directModified": false,
+  "lusOptions": 24,
+  "tests": {
+    "unit": 37,
+    "graphics": 20,
+    "lus": 10
+  },
+  "inGameGuiValidated": false
+}

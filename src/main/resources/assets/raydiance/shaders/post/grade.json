@@ -1,0 +1,17 @@
+{
+  "targets": [
+    "raydiance_swap"
+  ],
+  "passes": [
+    {
+      "name": "raydiance:grade",
+      "intarget": "minecraft:main",
+      "outtarget": "raydiance_swap"
+    },
+    {
+      "name": "minecraft:blit",
+      "intarget": "raydiance_swap",
+      "outtarget": "minecraft:main"
+    }
+  ]
+}
