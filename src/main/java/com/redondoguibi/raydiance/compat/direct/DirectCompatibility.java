@@ -50,6 +50,26 @@ public final class DirectCompatibility {
         }
     }
 
+    /**
+     * Direct can post-process the completed world: installed, API 1.5 world-post-v1, and replacing terrain.
+     * Called once per client tick; never loads Direct classes when it is absent.
+     */
+    public static boolean worldPostAvailable() {
+        if (!ModList.get().isLoaded(DIRECT_MOD_ID)) return false;
+        try {
+            Class<?> serviceType = Class.forName(SERVICE_CLASS);
+            Object service = serviceType.getMethod("getInstance").invoke(null);
+            String version = (String) serviceType.getMethod("apiVersion").invoke(service);
+            if (!safeShaderApi(version)) return false;
+            Object capabilities = serviceType.getMethod("capabilities").invoke(service);
+            if (!(Boolean) capabilities.getClass().getMethod("nativeTerrain").invoke(capabilities)) return false;
+            var features = (java.util.Set<?>) serviceType.getMethod("terrainFeatures").invoke(service);
+            return features.contains("world-post-v1");
+        } catch (ReflectiveOperationException | LinkageError | SecurityException | ClassCastException exception) {
+            return false;
+        }
+    }
+
     public record Status(
             boolean installed,
             boolean enabled,

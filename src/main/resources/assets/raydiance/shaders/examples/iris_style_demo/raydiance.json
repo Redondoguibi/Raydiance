@@ -1,0 +1,20 @@
+{
+  "format": 3,
+  "name": "Iris-style demo",
+  "buffers": {
+    "colortex1": {"format": "RGBA16F", "scale": 0.5}
+  },
+  "programs": {
+    "composite": {"enabled": "BLOOM"},
+    "composite1": {"enabled": "BLOOM"},
+    "composite2": {"enabled": "BLOOM"}
+  },
+  "defineCategories": {
+    "BLOOM": "Bloom", "BLOOM_STRENGTH": "Bloom", "BLOOM_THRESHOLD": "Bloom",
+    "TONEMAP": "Image", "VIGNETTE": "Image", "HAZE": "Image"
+  },
+  "presets": [
+    {"name": "Soft", "shaderValues": {"BLOOM_STRENGTH": "0.25", "VIGNETTE": false, "TONEMAP": "1"}},
+    {"name": "Vivid", "shaderValues": {"BLOOM_STRENGTH": "0.5", "TONEMAP": "2", "HAZE": true}}
+  ]
+}

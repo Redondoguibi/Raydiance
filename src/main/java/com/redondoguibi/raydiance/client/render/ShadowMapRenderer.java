@@ -29,13 +29,17 @@ public final class ShadowMapRenderer {
     public static boolean ready(){return ready&&map!=null;}
     public static int texture(){return map.depth;}
     public static Matrix4f transform(){return transform;}
+    /** Camera-relative world space to light view (Iris shadowModelView). */
+    public static Matrix4f lightView(){return lightView;}
+    public static Matrix4f lightProjection(){return lightProjection;}
     public static void render(List<RenderSection> sections,double x,double y,double z,Matrix4f cameraView){
         if(!Config.ENABLE_EFFECTS.get()||VisualPostProcessor.value("contactShadows")==0||!TerrainEffects.available()||shader==null||failed){release();return;}
         var mc=Minecraft.getInstance();
         if(!mc.level.dimensionType().hasSkyLight())return;
         float angle=mc.level.getSunAngle(0),sunX=-(float)java.lang.Math.sin(angle),sunY=(float)java.lang.Math.cos(angle);
         if(sunY<0.05f)return;
-        int resolution=Config.QUALITY.get()==0?512:Config.QUALITY.get()==1?1024:2048;
+        int quality=com.redondoguibi.raydiance.client.pipeline.PipelineManager.quality();
+        int resolution=quality==0?512:quality==1?1024:2048;
         GlState state=new GlState();
         try{
             if(map==null||map.width!=resolution){release();map=new GlTarget(resolution,resolution,true);}

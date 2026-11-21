@@ -76,12 +76,15 @@ vec3 sunRays(){
  return vec3(1.0,0.75,0.4)*lit/float(max(Steps,1))*proximity*GodRays*Daylight*(1.0-Rain)*0.3;
 }
 void main(){
- vec4 original=texture(Scene,texCoord);float depth=texture(Depth,texCoord).r;
- vec3 c=aa(texCoord),p=position(texCoord,depth);
+ vec4 original=texture(Scene,texCoord);
+ bool geometryEffects=Shadows>0.0||Ssao>0.0||Atmosphere>0.0;
+ float depth=1.0;vec3 p=vec3(0.0);
+ if(geometryEffects){depth=texture(Depth,texCoord).r;p=position(texCoord,depth);}
+ vec3 c=aa(texCoord);
  if(Sharpen>0.0){vec3 neighbors=(texture(Scene,texCoord+vec2(Texel.x,0)).rgb+texture(Scene,texCoord-vec2(Texel.x,0)).rgb+
  texture(Scene,texCoord+vec2(0,Texel.y)).rgb+texture(Scene,texCoord-vec2(0,Texel.y)).rgb)*0.25;
  c=max(c+(original.rgb-neighbors)*Sharpen*0.35,vec3(0));}
- if(depth<0.999999)c*=shadow(p)*ambientOcclusion(p);
+ if(depth<0.999999&&(Shadows>0.0||Ssao>0.0))c*=shadow(p)*ambientOcclusion(p);
  c+=sunRays();
  if(Atmosphere>0.0){
   vec3 ray=normalize(p);float sunGlow=pow(max(dot(ray,normalize(Sun)),0.0),32.0);

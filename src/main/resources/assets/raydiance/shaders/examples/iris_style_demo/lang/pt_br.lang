@@ -1,0 +1,9 @@
+option.BLOOM=Bloom
+option.BLOOM.comment=Brilho ao redor de áreas claras. Desligar pula os três programas em meia resolução.
+option.BLOOM_STRENGTH=Intensidade do bloom
+option.BLOOM_THRESHOLD=Limiar do bloom
+option.TONEMAP=Mapeamento tonal
+option.TONEMAP.comment=0 = desligado, 1 = Reinhard, 2 = aproximação ACES.
+option.VIGNETTE=Vinheta
+option.HAZE=Névoa de distância
+option.HAZE.comment=Mistura o terreno distante com a cor da névoa usando depthtex0.

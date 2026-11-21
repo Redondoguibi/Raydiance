@@ -60,6 +60,10 @@ public final class Config {
     public static final ModConfigSpec.DoubleValue DIRECT_DETAIL = option("directDetail", .12, 0, 1);
     public static final ModConfigSpec.BooleanValue FXAA = BUILDER.define("fxaa", false);
     public static final ModConfigSpec.IntValue QUALITY = BUILDER.defineInRange("quality", 1, 0, 2);
+    public static final ModConfigSpec.ConfigValue<String> PACK_BACKEND = BUILDER
+            .comment("Shaderpack renderer: auto (Direct DX12 when it owns the world, else OpenGL), direct or opengl.")
+            .translation("raydiance.configuration.packBackend")
+            .define("packBackend", "auto", v -> v instanceof String text && text.matches("auto|direct|opengl"));
     public static final ModConfigSpec.ConfigValue<String> OPENGL_PACK = BUILDER.define("openglPack", "none",
             v -> v instanceof String text && text.matches("none|[a-z0-9][a-z0-9_-]{0,47}"));
 

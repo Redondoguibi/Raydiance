@@ -5,15 +5,18 @@ import org.lwjgl.system.MemoryStack;
 public final class GlState implements AutoCloseable {
     private final int read=GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING),draw=GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING),
         program=GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM),vao=GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING),active=GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-    private final int[] viewport=new int[4],textures=new int[5];
+    private final int[] viewport=new int[4],textures=new int[UNITS];
+    /** Texture units Raydiance programs may bind (FrameUniforms caps samplers per program at this count). */
+    public static final int UNITS=16;
     private final boolean depth=GL11.glIsEnabled(GL11.GL_DEPTH_TEST),blend=GL11.glIsEnabled(GL11.GL_BLEND),
         cull=GL11.glIsEnabled(GL11.GL_CULL_FACE),scissor=GL11.glIsEnabled(GL11.GL_SCISSOR_TEST),srgb=GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB),
         depthMask=GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
     private final int depthFunc=GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
     private final double clearDepth=GL11.glGetDouble(GL11.GL_DEPTH_CLEAR_VALUE);
     private final byte[] colorMask=new byte[4];
+    private final float[] clearColor=new float[4];
     public GlState(){
-        GL11.glGetIntegerv(GL11.GL_VIEWPORT,viewport);
+        GL11.glGetIntegerv(GL11.GL_VIEWPORT,viewport);GL11.glGetFloatv(GL11.GL_COLOR_CLEAR_VALUE,clearColor);
         try(MemoryStack stack=MemoryStack.stackPush()){var mask=stack.malloc(4);GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK,mask);mask.get(colorMask);}
         for(int i=0;i<textures.length;i++){GL13.glActiveTexture(GL13.GL_TEXTURE0+i);textures[i]=GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);}
         GL13.glActiveTexture(GL13.GL_TEXTURE0);
@@ -26,6 +29,6 @@ public final class GlState implements AutoCloseable {
         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER,read);GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,draw);
         GL11.glViewport(viewport[0],viewport[1],viewport[2],viewport[3]);
         enable(GL11.GL_DEPTH_TEST,depth);enable(GL11.GL_BLEND,blend);enable(GL11.GL_CULL_FACE,cull);enable(GL11.GL_SCISSOR_TEST,scissor);enable(GL30.GL_FRAMEBUFFER_SRGB,srgb);
-        GL11.glDepthFunc(depthFunc);GL11.glClearDepth(clearDepth);GL11.glDepthMask(depthMask);GL11.glColorMask(colorMask[0]!=0,colorMask[1]!=0,colorMask[2]!=0,colorMask[3]!=0);
+        GL11.glDepthFunc(depthFunc);GL11.glClearDepth(clearDepth);GL11.glClearColor(clearColor[0],clearColor[1],clearColor[2],clearColor[3]);GL11.glDepthMask(depthMask);GL11.glColorMask(colorMask[0]!=0,colorMask[1]!=0,colorMask[2]!=0,colorMask[3]!=0);
     }
 }

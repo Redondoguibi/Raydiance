@@ -52,6 +52,18 @@ public final class RaydianceCommands {
                         .then(Commands.argument("setting", StringArgumentType.word())
                                 .then(Commands.argument("value", DoubleArgumentType.doubleArg(-2.0, 2.0))
                                         .executes(RaydianceCommands::set))))
+                .then(Commands.literal("pack")
+                        .executes(RaydianceCommands::packStatus)
+                        .then(Commands.literal("status").executes(RaydianceCommands::packStatus))
+                        .then(Commands.literal("list").executes(RaydianceCommands::packList))
+                        .then(Commands.literal("reload").executes(RaydianceCommands::packReload))
+                        .then(Commands.literal("off").executes(ctx -> packSelect(ctx, "none")))
+                        .then(Commands.literal("load")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .executes(ctx -> packSelect(ctx, StringArgumentType.getString(ctx, "name")))))
+                        .then(Commands.literal("backend")
+                                .then(Commands.argument("mode", StringArgumentType.word())
+                                        .executes(ctx -> packBackend(ctx, StringArgumentType.getString(ctx, "mode"))))))
                 .then(Commands.literal("shader")
                         .executes(RaydianceCommands::shaderStatus)
                         .then(Commands.literal("list").executes(RaydianceCommands::shaderList))
@@ -69,7 +81,62 @@ public final class RaydianceCommands {
         say(ctx, "Colors: /raydiance set <saturation|contrast|brightness|exposure|gamma|temperature|vignette|strength> <number>");
         say(ctx, "Presets: /raydiance preset <default|warm|vibrant|cinematic>");
         say(ctx, "Fog: /raydiance fog <distance <0.25-3>|color <r> <g> <b>|color-off|reset|status>");
+        say(ctx, "Shaderpacks: /raydiance pack <list|load <name>|off|reload|status|backend <auto|direct|opengl>>");
         say(ctx, "Direct-only HLSL: /raydiance shader <list|install-example|load <name>|off|reload|status>");
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int packStatus(CommandContext<CommandSourceStack> ctx) {
+        for (String line : VisualPostProcessor.diagnostic().split("\n")) say(ctx, line);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int packList(CommandContext<CommandSourceStack> ctx) {
+        try {
+            var packs = com.redondoguibi.raydiance.client.shaders.PackRepository.list();
+            say(ctx, packs.isEmpty() ? "No shaderpacks in " + ShaderPackFiles.directory() : "Shaderpacks: " + String.join(", ", packs));
+            return Command.SINGLE_SUCCESS;
+        } catch (IOException exception) {
+            say(ctx, "Cannot list shaderpacks: " + exception.getMessage());
+            return 0;
+        }
+    }
+
+    private static int packReload(CommandContext<CommandSourceStack> ctx) {
+        VisualPostProcessor.reload(true);
+        DirectShaderBridge.refresh();
+        say(ctx, "Shaderpack reload requested.");
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int packSelect(CommandContext<CommandSourceStack> ctx, String name) {
+        try {
+            if (!"none".equals(name) && !com.redondoguibi.raydiance.client.shaders.PackRepository.list().contains(name)) {
+                say(ctx, "Unknown shaderpack: " + name);
+                return 0;
+            }
+        } catch (IOException exception) {
+            say(ctx, "Cannot list shaderpacks: " + exception.getMessage());
+            return 0;
+        }
+        Config.OPENGL_PACK.set(name);
+        Config.SPEC.save();
+        VisualPostProcessor.reload(true);
+        DirectShaderBridge.refresh();
+        say(ctx, "Selected shaderpack: " + name);
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int packBackend(CommandContext<CommandSourceStack> ctx, String mode) {
+        if (!mode.matches("auto|direct|opengl")) {
+            say(ctx, "Backend must be auto, direct or opengl.");
+            return 0;
+        }
+        Config.PACK_BACKEND.set(mode);
+        Config.SPEC.save();
+        VisualPostProcessor.reload(true);
+        DirectShaderBridge.refresh();
+        say(ctx, "Shaderpack backend: " + mode);
         return Command.SINGLE_SUCCESS;
     }
 

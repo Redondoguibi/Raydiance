@@ -1,7 +1,6 @@
-[04nov.2026 17:16:02.387] [Test worker/WARN] [com.redondoguibi.raydiance.Raydiance/]: Cannot load shaderpack settings for lus
-java.lang.IllegalArgumentException: Non-finite shader setting
-	at com.redondoguibi.raydiance.client.shaders.ShaderOption.normalize(ShaderOption.java:24) ~[main/:?]
-	at com.redondoguibi.raydiance.client.shaders.PackOptionStore.prepare(PackOptionStore.java:34) ~[main/:?]
+[20nov.2026 23:19:42.905] [Test worker/WARN] [com.redondoguibi.raydiance.Raydiance/]: Cannot load shaderpack settings for lus
+java.io.IOException: Non-finite shader option
+	at com.redondoguibi.raydiance.client.shaders.PackOptionStore.prepare(PackOptionStore.java:36) ~[main/:?]
 	at com.redondoguibi.raydiance.client.shaders.PackOptionsTest.corruptSavedValuesFallBackWithoutBreakingPack(PackOptionsTest.java:29) ~[test/:?]
 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[?:?]
 	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[?:?]

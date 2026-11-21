@@ -50,24 +50,27 @@ public final class DirectShaderBridge {
         try {
             Class<?> serviceType = Class.forName(API);
             Object service = serviceType.getMethod("getInstance").invoke(null);
-            if (!caps.enabled() || !caps.apiCompatible() || !caps.nativeTerrain() || !Config.ENABLE_EFFECTS.get()
+            // running(): Effects or Direct integration off releases every geometry/material/fog request.
+            // Geometry, materials and fog follow the pack only while it actually runs on Direct DX12.
+            if (!com.redondoguibi.raydiance.client.pipeline.PipelineManager.directActive() || !caps.apiCompatible() || !caps.nativeTerrain()
                     || net.minecraft.client.Minecraft.getInstance().level == null) {
                 releaseGeometry();
                 geometryState = "";
                 return;
             }
             var features = (java.util.Set<?>) serviceType.getMethod("terrainFeatures").invoke(service);
-            if (!features.contains("shadows") || !features.contains("water")) {
+            if (!features.contains("world-post-v1") || !features.contains("shadows") || !features.contains("water")) {
                 releaseGeometry();
-                geometryState = " Geometry DX12 unavailable.";
+                geometryState = " Shaderpacks require Direct API 1.5 world-post support.";
                 return;
             }
+
             Class<?> settings = Class.forName("com.redondoguibi.direct.api.DirectTerrainEffects");
             var values = settings.getConstructor(float.class, float.class, float.class, float.class, int.class).newInstance(
                     (float) com.redondoguibi.raydiance.client.profile.DynamicProfiles.value("contactShadows"),
                     (float) com.redondoguibi.raydiance.client.profile.DynamicProfiles.value("water"),
                     (float) com.redondoguibi.raydiance.client.profile.DynamicProfiles.value("reflections"),
-                    (float) com.redondoguibi.raydiance.client.profile.DynamicProfiles.value("wind"), Config.QUALITY.get());
+                    (float) com.redondoguibi.raydiance.client.profile.DynamicProfiles.value("wind"), com.redondoguibi.raydiance.client.pipeline.PipelineManager.quality());
             boolean materialSupport=features.contains("material-lighting");
             if(materialSupport){
                 Class<?> materialType=Class.forName("com.redondoguibi.direct.api.DirectMaterialEffects");
@@ -81,11 +84,12 @@ public final class DirectShaderBridge {
                 serviceType.getMethod("requestTerrainEffects", String.class, settings).invoke(service, "raydiance", values);
             }
             geometryRegistered = true;
+            serviceType.getMethod("shaderFogDistance",float.class).invoke(service,(float)com.redondoguibi.raydiance.client.pipeline.PipelineManager.value("fogDistance"));
             geometryActive = "raydiance".equals(serviceType.getMethod("terrainEffectOwner").invoke(service));
             geometryState = geometryActive ? (materialSupport?" Geometry and materials: DX12.":" Geometry: DX12; materials require Direct API 1.4.") : " Geometry controlled by another extension.";
         } catch (NoSuchMethodException | ClassNotFoundException ex) {
             releaseGeometry();
-            geometryState = " Geometry requires Direct API 1.3.";
+            geometryState = " Shaderpacks require Direct API 1.5.";
         } catch (ReflectiveOperationException | LinkageError | SecurityException ex) {
             releaseGeometry();
             geometryState = " Geometry error: " + rootMessage(ex);
@@ -99,6 +103,7 @@ public final class DirectShaderBridge {
             Class<?> type = Class.forName(API);
             Object service = type.getMethod("getInstance").invoke(null);
             type.getMethod("releaseTerrainEffects", String.class).invoke(service, "raydiance");
+            try{type.getMethod("shaderFogDistance",float.class).invoke(service,1f);}catch(NoSuchMethodException ignored){/* Older Direct has no shader fog request to release. */}
             geometryRegistered = false;
         } catch (ReflectiveOperationException | LinkageError | SecurityException ex) {
             // Retain the registration flag so the next tick retries the cleanup.

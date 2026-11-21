@@ -1,4 +1,10 @@
-# Raydiance 1.5.2
+# Raydiance 1.7.0
+
+1.7.0 rebuilds the shader system around an Iris-inspired pipeline manager (see [Shader pipeline 1.7](#shader-pipeline-17)): selected packs run on Direct DX12 or OpenGL according to an explicit backend setting, format 3 adds Iris-style `composite*`/`final` programs over `colortex0-7`, and options can be declared as `#define`s in the pack source. Compatibility with Iris/OptiFine shaderpacks is not a goal.
+
+In 1.6.x a selected pack executed only through Direct API 1.5, and its GLSL was not executed. Pack settings and presets are stored separately and override standalone OpenGL settings. Without a shaderpack, standalone settings remain OpenGL. Lus includes a native port. See the Direct project docs/shaderpacks-dx12-1.7.md for the contract, transfer costs and validation limits.
+
+1.5.3 adds per-program uniform change tracking, neutral built-in pass bypass and eligible final-pass direct output. These preserve configured effects and do not establish a measured FPS improvement.
 
 1.5.2 adds an optional **Direct settings** button on the Integration page, using the installed mod's NeoForge configuration factory. Direct saves independently; returning preserves the pending Raydiance preview. F8 now opens the menu only from gameplay, avoiding nested menus while editing. These changes were compiled and packaged without running tests or launching the game.
 
@@ -10,8 +16,8 @@ Direct 1.5.0 / API 1.4 optionally executes material highlights, rain wetness, em
 ## Interface
 
 Open Mods > Raydiance > Config, press F8 inside a world, or use `/raydiance menu`.
-Seven pages expose color grading, effects, environment, folder shaderpacks, optional DX12, Lighting and Materiais DX12.
-Numeric sliders preview immediately. Save persists; Cancel/Escape restores the settings from screen entry.
+The **Raydiance** tab edits built-in visuals, fog and dynamic profiles. Selecting a shaderpack pauses the built-in visuals. In **Shaderpacks**, choose a folder pack and edit its presets, effects, materials, quality and FXAA. Each pack has its own saved settings. Choose **None** to return to the built-in visuals.
+**Direct Terrain** opens the terrain renderer's own settings and manages the optional standalone terrain HLSL pass. Save commits the Raydiance session, Cancel discards it, and Back returns to the previous category.
 Profile editing has its own Save/Cancel transaction. Advanced effects and automatic profiles are off by default.
 Existing color/fog commands and Direct HLSL commands remain supported.
 
@@ -77,8 +83,8 @@ Manifest example:
 {"format":1,"name":"Cinematic Light","options":{"bloom":0.25,"atmosphere":0.2,"saturation":1.08}}
 ```
 
-Pack defaults override base numeric settings. Moving a slider copies those defaults into editable settings and turns
-off that override, retaining the selected GLSL. Use pack defaults restores it. FXAA/quality remain client controls.
+Each folder pack starts with its manifest defaults. Its visual controls, quality, FXAA and presets are stored per pack.
+Restore pack defaults previews the original values. Save changes confirms them.
 Folder names use 1-48 lowercase letters/digits/underscores/hyphens. Manifests are bounded to 64 KiB, GLSL to 256 KiB.
 Local quoted includes are supported with cycle/depth/file/output budgets; path traversal and symlink paths are rejected.
 Packs do not load native code or access the network.
@@ -94,8 +100,8 @@ In format 1, custom `composite.fsh` replaces the built-in final composite. It re
 Depth uses OpenGL [0,1] depth with sky at 1. ShadowTransform maps view-space positions to light clip space.
 Use ShadowTex only when ShadowReady > 0 and BloomTex only when Bloom > 0. Custom GLSL decides which controls to honor.
 Format 1 supports one custom composite. Format 2 adds the bounded ordered post chain described below.
-Gbuffers, compute shaders, arbitrary target graphs and Iris shader translation are not available.
-It is not compatible with Iris/OptiFine/Complementary/BSL shaderpacks.
+Format 3 (below) adds named buffers and Iris-style programs. Gbuffers, shadow programs, compute shaders and Iris shader
+translation are not available; Iris/OptiFine/Complementary/BSL packs are not supported.
 
 ## Performance and compatibility
 
@@ -135,7 +141,7 @@ across launches, and a local test world rendered with advanced effects enabled. 
 long-session testing, GPU benchmarks or broad mod compatibility testing. Full off-screen/cascaded shadows,
 arbitrary shaderpack pass graphs and Iris compatibility remain unimplemented.
 
-Output: `build/libs/raydiance-1.5.2.jar`.
+Output: `build/libs/raydiance-1.7.0.jar`.
 
 ## Format 2: ordered post passes
 
@@ -219,3 +225,109 @@ See [Iris reference study](docs/iris-reference.md) for the inspected source revi
 F8 > Shaderpacks > Configurar shaderpack exposes declarative pack controls, live preview, presets and reset. Finish with Concluir then Save; Cancel rolls back previews. Pack-specific values persist outside pack folders in config/raydiance/pack-options. Lus supplies 16 controls and three presets.
 
 Use Direct 1.4.0 / API 1.3.0 for native geometry requests. API 1.2+ supplies original terrain depth to the optional Lus HLSL detail pass; HLSL: none skips that extra draw while geometry effects remain available. Disabling integration does not disable renderer discovery or the Direct terrain backend. Native shadows are near sun maps (no cascades/entity shadows); water uses bounded screen-space reflections with an atmospheric fallback. Fabulous/custom targets retain vanilla translucency. See the main Direct project docs/native-shader-contract.md for evidence, resource costs and manual validation limits. Actual modpack FPS has not been validated for this release.
+
+## Shader pipeline 1.7
+
+### Architecture
+
+`PipelineManager` owns one `ShaderPipeline` (`GlPipeline` or `DirectPipeline`), like Iris' `PipelineManager` and
+`WorldRenderingPipeline`. Pack data (manifest, sources, options) loads without GL, so menus can edit a pack that fails
+to compile. The pipeline key is pack + dimension + language + backend + `#define` values + quality + reload counter;
+when it changes, a candidate is compiled and validated first. A failed build keeps the previous pipeline of the same pack
+(for example after a bad `#define` choice); a failing different pack leaves nothing running. Errors go to the log, the
+diagnostics page and once to chat, with driver line numbers mapped to pack file names (`lib/common.glsl:12`).
+
+Leaving a world destroys the pipeline. Uniform plans are resolved once per program from its active uniforms, so a draw
+uploads only what the program declares.
+
+### Backends
+
+`packBackend` (Shaderpacks page > Backend, or `/raydiance pack backend <mode>`):
+
+| Mode | Behavior |
+| --- | --- |
+| `auto` (default) | Direct DX12 when integration is on, Direct replaces terrain with `world-post-v1`, Fabulous is off and the pack has `direct.hlsl` (or is parameter-only). Otherwise the pack's GLSL runs on OpenGL. If Direct rejects the HLSL, the pack switches to OpenGL until reload. |
+| `direct` | 1.6 behavior: DX12 only; the pack pauses with a reason otherwise. |
+| `opengl` | Never uses Direct. |
+
+The reason for any fallback is shown in the diagnostics and on the Shaderpacks page; there is no silent switch. While a
+pack runs on OpenGL, its own values drive GL terrain water/wind, projected shadows and fog. On DX12 those belong to Direct.
+
+### Keys and commands
+
+R reloads the shaderpack (showing the backend and compile time) and K toggles all Raydiance effects (Iris defaults;
+rebindable). `/raydiance pack <list|load <name>|off|reload|status|backend <auto|direct|opengl>>`.
+
+### Pack sources
+
+- Packs may be folders or `.zip` files (manifest at the zip root or in its single top-level folder), with the same id rules.
+- `#include "/lib/x.glsl"` resolves from the pack root; relative includes still resolve from the including file.
+- Dimension folders: files in `world0/` (Overworld), `world-1/` (Nether) or `world1/` (End) replace root files of the same
+  name in that dimension; other files fall back to the root. `"dimensions": {"mod:moon": "world_moon"}` maps more.
+- Standard macros are inserted after `#version` (GLSL) or prepended (HLSL): `RAYDIANCE`, `RAYDIANCE_VERSION` (10700),
+  `MC_VERSION` (12101), `RAYDIANCE_FORMAT`, `RAYDIANCE_QUALITY` (0-2), `RAYDIANCE_BACKEND_OPENGL` or `_DX12`,
+  `RAYDIANCE_DIMENSION_OVERWORLD|NETHER|END|OTHER`. Iris identity macros are never defined.
+- HLSL includes now emit `#line N "file"`, which FXC accepts.
+
+### `#define` options
+
+Discovered from the expanded sources of every program and `direct.hlsl`, as in Iris:
+
+```glsl
+#define SAMPLES 8 // [4 8 16] Samples per pixel.   -> choice (the default must be listed)
+#define BLOOM // Glow.                             -> toggle, on
+//#define HAZE                                     -> toggle, off
+```
+
+A toggle counts only when its name is tested by `#ifdef`, `#ifndef` or `defined`; include guards are ignored. Values
+without a `[...]` list (such as `#define X PackUniform`) are not options. Labels and descriptions come from
+`lang/<locale>.lang` (`option.NAME`, `option.NAME.comment`, falling back to `en_us`); categories come from the manifest's
+`"defineCategories": {"NAME": "Category"}`. Changing a define recompiles the pack; manifest `shaderOptions` stay live
+uniforms. Presets may set defines by bare name with their source value (`"TONEMAP": "2"`, `"HAZE": true`); a define
+absent in the current dimension is skipped. Values are stored with the other pack settings in `pack-options`.
+
+### Format 3: Iris-style programs
+
+```json
+{"format": 3, "name": "My pack",
+ "buffers": {"colortex1": {"format": "RGBA16F", "scale": 0.5, "clear": true, "clearColor": [0,0,0,0], "mipmap": false}},
+ "programs": {"composite1": {"when": "bloom", "enabled": "BLOOM"}},
+ "builtinEffects": false}
+```
+
+- Programs are discovered by name and run in order: `composite.fsh`, `composite1.fsh` … `composite31.fsh`, `final.fsh`.
+  `enabled` names a toggle define (or is `false`); `when` gates on an engine value, as in format 2.
+- `colortex0` starts as the frame input: the world color, or the built-in effects' result with `"builtinEffects": true`.
+  It is never written in place. Buffers `colortex0-7` (aliases `gcolor gdepth gnormal composite gaux1-4`) exist when
+  written, sampled or declared.
+- `/* RENDERTARGETS: 1,2 */` or `/* DRAWBUFFERS:12 */` selects outputs (default `0`). Multiple outputs need
+  `#version 330` with `layout(location = N) out vec4`. All targets of a program must share a scale.
+- Each buffer ping-pongs: a program reads the current side and writes the other, so reading and writing the same buffer
+  is safe. Buffers with `clear: false` keep their contents between frames (history).
+- Directives `const int colortexNFormat = RGBA16F;`, `colortexNClear`, `colortexNClearColor` and
+  `colortexNMipmapEnabled` (usually inside comments) are read; manifest values win. Mipmaps are regenerated before each
+  program that enables them. Formats: RGBA8, RGBA16, RGBA16F, RGBA32F, RGB10_A2, R11F_G11F_B10F, R8, RG8, R16F, RG16F,
+  R32F, RG32F. colortex0 is full resolution; other buffers scale 0.25-1.
+- `final` draws straight into the world target when it does not sample that texture; otherwise the result is copied.
+  Buffers (two textures each) count toward the 128 MiB budget.
+- Up to 16 samplers per program. Built-in textures: `depthtex0` (scene depth), `depthtex1`/`depthtex2` (depth before
+  translucent terrain, captured only when sampled), `shadowtex0`/`shadowtex1`, `noisetex` (256², RGBA, repeat).
+
+Iris-style uniform aliases, available in every format: `viewWidth viewHeight aspectRatio near far frameCounter frameTime
+frameTimeCounter worldTime worldDay moonPhase sunAngle shadowAngle rainStrength wetness thunderStrength isEyeInWater
+eyeBrightness eyeBrightnessSmooth` (ivec2 0-240, 10 s half-life) `eyeAltitude screenBrightness nightVision blindness
+darknessFactor sunPosition moonPosition shadowLightPosition upPosition` (view space, length 100) `cameraPosition
+cameraPositionInt cameraPositionFract previousCameraPosition skyColor fogColor gbufferModelView(Inverse)
+gbufferProjection(Inverse) gbufferPreviousModelView gbufferPreviousProjection shadowModelView(Inverse)
+shadowProjection(Inverse) noiseTextureResolution`. They are names, not gbuffer data: colortex buffers hold only what
+composite programs wrote. Reserved names must use their exact types.
+
+The Pack files page installs `iris_style_demo`: bloom over three half-resolution programs, a final with tone mapping,
+vignette and haze options, a Nether variant in `world-1/` and lang files.
+
+### Tests
+
+`gradlew test` covers backend selection, define discovery/rewriting, macros and `#line` mapping, log translation,
+directives, ping-pong state, format-3 loading, dimension folders and zips. `gradlew graphicsTest` compiles the bundled
+example in the Overworld and the Nether, checks ping-pong, MRT, HDR buffers and direct final output, and compiles Lus when
+the sibling folder exists. The game was not launched for 1.7.0 and no FPS measurements were taken.

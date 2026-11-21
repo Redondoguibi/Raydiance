@@ -71,9 +71,9 @@ public final class DynamicProfiles {
             blended.put(key,ProfileRules.blend(blended.getOrDefault(key,base),target,Config.TRANSITION_SECONDS.get(),dt));
         }
     }
-    public static double value(String key) { return Config.DYNAMIC_PROFILES.get()?blended.getOrDefault(key,base(key)):base(key); }
+    public static double value(String key) { if(com.redondoguibi.raydiance.client.pipeline.PipelineManager.packSelected())return com.redondoguibi.raydiance.client.pipeline.PipelineManager.value(key); return Config.DYNAMIC_PROFILES.get()?blended.getOrDefault(key,base(key)):base(key); }
     private static double base(String key) {
-        Double override=Config.USE_PACK_DEFAULTS.get()?PackRepository.active().options().get(key):null;
+        Double override=Config.USE_PACK_DEFAULTS.get()&&PackRepository.active().id().equals(Config.OPENGL_PACK.get())?PackRepository.active().options().get(key):null;
         return override==null?SettingsOptions.number(key):override;
     }
     private DynamicProfiles() {}

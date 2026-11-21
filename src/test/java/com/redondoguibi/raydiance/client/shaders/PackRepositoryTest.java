@@ -23,7 +23,7 @@ class PackRepositoryTest {
         assertThrows(ClassNotFoundException.class,()->Class.forName("com.redondoguibi.direct.api.DirectRenderService"),"Standalone tests must not require the Direct JAR");
     }
     @Test void rejectsTraversal(){assertThrows(IOException.class,()->PackRepository.read(root,"../test"));assertThrows(IOException.class,()->PackRepository.read(root,"C:/test"));}
-    @Test void rejectsUnknownFormat() throws Exception{pack("{\"format\":3}");assertThrows(IOException.class,()->PackRepository.read(root,"test"));}
+    @Test void rejectsUnknownFormat() throws Exception{pack("{\"format\":9}");assertThrows(IOException.class,()->PackRepository.read(root,"test"));}
     @Test void rejectsUnknownOrNonFiniteOptions(){assertThrows(IllegalArgumentException.class,()->PackRepository.validateOption("unknown",.1));assertThrows(IllegalArgumentException.class,()->PackRepository.validateOption("bloom",Double.NaN));assertThrows(IllegalArgumentException.class,()->PackRepository.validateOption("water",-1));}
     @Test void boundsReadsAndRejectsEmpty() throws Exception{Path file=root.resolve("data");Files.writeString(file,"12345");assertThrows(IOException.class,()->PackRepository.readText(file,4));assertEquals("12345",PackRepository.readText(file,5));Files.writeString(file,"");assertThrows(IOException.class,()->PackRepository.readText(file,10));}
     @Test void keepsPreviousPackOnReadFailure() throws Exception{pack("{\"format\":1}");var good=PackRepository.read(root,"test");PackRepository.accept(good);assertThrows(IOException.class,()->PackRepository.read(root,"missing"));assertSame(good,PackRepository.active());PackRepository.accept(new PackRepository.Pack("none","Base",java.util.Map.of(),null));}

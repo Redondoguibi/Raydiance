@@ -1,0 +1,9 @@
+option.BLOOM=Bloom
+option.BLOOM.comment=Glow around bright areas. Disabling it skips the three half-resolution programs.
+option.BLOOM_STRENGTH=Bloom strength
+option.BLOOM_THRESHOLD=Bloom threshold
+option.TONEMAP=Tone mapping
+option.TONEMAP.comment=0 = off, 1 = Reinhard, 2 = ACES approximation.
+option.VIGNETTE=Vignette
+option.HAZE=Distance haze
+option.HAZE.comment=Mixes distant terrain toward the fog color using depthtex0.

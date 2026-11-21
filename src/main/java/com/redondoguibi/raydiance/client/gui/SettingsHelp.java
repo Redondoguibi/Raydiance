@@ -20,18 +20,24 @@ final class SettingsHelp {
         if(I18n.exists(id))return Component.translatable(id);
         return Component.translatable("raydiance.configuration."+key+".tooltip");
     }
-    static void tip(AbstractWidget control,String key){
+    static Component description(String scope,String key){
+        String id="raydiance.help."+scope+"."+key;
+        return I18n.exists(id)?Component.translatable(id):description(key);
+    }
+    static void tip(AbstractWidget control,String scope,String key){
         String id="raydiance.help."+key;
-        if(I18n.exists(id)||I18n.exists("raydiance.configuration."+key+".tooltip"))
-            control.setTooltip(Tooltip.create(description(key)));
+        if(I18n.exists("raydiance.help."+scope+"."+key)||I18n.exists(id)||I18n.exists("raydiance.configuration."+key+".tooltip"))
+            control.setTooltip(Tooltip.create(description(scope,key)));
     }
     static List<Component> guide(String[] keys){
-        var result=new ArrayList<Component>();result.add(Component.translatable("raydiance.ui.general"));
-        result.add(Component.translatable("raydiance.ui.preview"));
+        return guide(keys,"");
+    }
+    static List<Component> guide(String[] keys,String scope){
+        var result=new ArrayList<Component>();result.add(Component.translatable("raydiance.ui.preview"));
         for(String key:keys){
             String label="raydiance.configuration."+key;
             result.add((I18n.exists(label)?Component.translatable(label):text(key)).copy().withStyle(net.minecraft.ChatFormatting.AQUA));
-            result.add(description(key));
+            result.add(description(scope,key));
         }
         return result;
     }

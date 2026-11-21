@@ -17,10 +17,15 @@ public record ShaderPreset(String name,Map<String,Double> options,Map<String,Dou
                 double v=e.getValue().getAsDouble();PackRepository.validateOption(e.getKey(),v);options.put(e.getKey(),v);
             }
             if(o.has("shaderValues"))for(var e:o.getAsJsonObject("shaderValues").entrySet()) {
-                var definition=definitions.stream().filter(d->d.key().equals(e.getKey())).findFirst().orElseThrow(()->new IllegalArgumentException("Unknown preset shader option"));
-                double v=e.getValue().getAsDouble();
+                // Define options may be named bare (BLOOM) or with their store key (define:BLOOM).
+                var match=definitions.stream().filter(d->d.key().equals(e.getKey())||d.define()&&d.defineName().equals(e.getKey())).findFirst();
+                // Discovered defines can differ per dimension folder; only manifest (uniform) keys must exist.
+                if(match.isEmpty()&&!e.getKey().matches("[a-z][a-zA-Z0-9]{0,47}"))continue;
+                var definition=match.orElseThrow(()->new IllegalArgumentException("Unknown preset shader option"));
+                // Define options accept their source value ("2", "HIGH", true); uniforms stay numeric.
+                double v=definition.parseStored(e.getValue());
                 if(v<definition.min()||v>definition.max()||Math.abs(v-definition.normalize(v))>1e-7)throw new IllegalArgumentException("Invalid preset value");
-                values.put(e.getKey(),v);
+                values.put(definition.key(),v);
             }
             double quality=o.has("quality")?o.get("quality").getAsDouble():1;
             if(quality<0||quality>2||quality!=Math.rint(quality))throw new IllegalArgumentException("Invalid preset quality");

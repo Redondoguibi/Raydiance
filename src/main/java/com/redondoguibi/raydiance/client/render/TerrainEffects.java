@@ -26,7 +26,7 @@ public final class TerrainEffects {
         catch(Exception ex){shader=null;Raydiance.LOGGER.error("Optional terrain effects unavailable",ex);}
         plants=List.of();
     }
-    public static boolean available(){return shader!=null&&!conflict&&!nativeTerrain;}
+    public static boolean available(){return !com.redondoguibi.raydiance.client.pipeline.PipelineManager.directActive()&&shader!=null&&!conflict&&!nativeTerrain;}
     public static String status(){return nativeTerrain?(com.redondoguibi.raydiance.compat.direct.DirectShaderBridge.nativeGeometryActive()?"Direct geometry effects: DX12":"Direct terrain: geometry effects not requested"):conflict?"Alternate terrain renderer: water/wind disabled":shader==null?"Terrain shader unavailable":"Vanilla terrain effects ready (OpenGL)";}
     private static float[] rect(net.minecraft.client.renderer.texture.TextureAtlasSprite s){return new float[]{s.getU0(),s.getV0(),s.getU1(),s.getV1()};}
     private static void rect(String name,float[] values){var u=shader.getUniform(name);if(u!=null)u.set(values);}
