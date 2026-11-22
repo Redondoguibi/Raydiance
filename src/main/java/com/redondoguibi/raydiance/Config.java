@@ -7,7 +7,7 @@ public final class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.BooleanValue ENABLE_DIRECT_INTEGRATION = BUILDER
-            .comment("Enable optional integration with Direct's public render-pass API.")
+            .comment("Enable Direct DX12 shaderpacks independently of Raydiance Standalone.")
             .translation("raydiance.configuration.enableDirectIntegration")
             .define("enableDirectIntegration", true);
 
@@ -34,11 +34,6 @@ public final class Config {
     public static final ModConfigSpec.DoubleValue FOG_GREEN = option("fogGreen", 0.75, 0.0, 1.0);
     public static final ModConfigSpec.DoubleValue FOG_BLUE = option("fogBlue", 0.85, 0.0, 1.0);
 
-    public static final ModConfigSpec.ConfigValue<String> DIRECT_SHADER = BUILDER
-            .comment("Optional Direct-only Raydiance HLSL shader filename, without extension; 'none' disables it.")
-            .define("directShader", "none", value -> value instanceof String text
-                    && ("none".equals(text) || text.matches("[a-z0-9][a-z0-9_-]{0,47}")));
-
     public static final ModConfigSpec.BooleanValue DYNAMIC_PROFILES = BUILDER.define("dynamicProfiles", false);
     public static final ModConfigSpec.DoubleValue TRANSITION_SECONDS = option("transitionSeconds", 3, 0, 30);
     public static final ModConfigSpec.DoubleValue BLOOM = option("bloom", 0, 0, 1);
@@ -56,14 +51,8 @@ public final class Config {
     public static final ModConfigSpec.DoubleValue GOD_RAYS = option("godRays", 0, 0, 1);
     public static final ModConfigSpec.DoubleValue SHARPEN = option("sharpen", 0, 0, 1);
     public static final ModConfigSpec.DoubleValue TONE_MAPPING = option("toneMapping", 0, 0, 1);
-    public static final ModConfigSpec.BooleanValue USE_PACK_DEFAULTS = BUILDER.define("usePackDefaults", true);
-    public static final ModConfigSpec.DoubleValue DIRECT_DETAIL = option("directDetail", .12, 0, 1);
     public static final ModConfigSpec.BooleanValue FXAA = BUILDER.define("fxaa", false);
     public static final ModConfigSpec.IntValue QUALITY = BUILDER.defineInRange("quality", 1, 0, 2);
-    public static final ModConfigSpec.ConfigValue<String> PACK_BACKEND = BUILDER
-            .comment("Shaderpack renderer: auto (Direct DX12 when it owns the world, else OpenGL), direct or opengl.")
-            .translation("raydiance.configuration.packBackend")
-            .define("packBackend", "auto", v -> v instanceof String text && text.matches("auto|direct|opengl"));
     public static final ModConfigSpec.ConfigValue<String> OPENGL_PACK = BUILDER.define("openglPack", "none",
             v -> v instanceof String text && text.matches("none|[a-z0-9][a-z0-9_-]{0,47}"));
 

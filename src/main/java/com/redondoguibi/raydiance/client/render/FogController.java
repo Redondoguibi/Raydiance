@@ -12,8 +12,7 @@ public final class FogController {
     }
 
     public static void distance(ViewportEvent.RenderFog event) {
-        // Direct DX12 packs own terrain fog (shaderFogDistance); OpenGL packs use their fogDistance here.
-        if (com.redondoguibi.raydiance.client.pipeline.PipelineManager.directActive() || !Config.ENABLE_EFFECTS.get() || event.getType() != FogType.NONE
+        if (com.redondoguibi.raydiance.client.pipeline.PipelineManager.shadersRequested() || !Config.ENABLE_EFFECTS.get() || event.getType() != FogType.NONE
                 || event.getMode() != FogRenderer.FogMode.FOG_TERRAIN) {
             return;
         }
@@ -29,7 +28,7 @@ public final class FogController {
     }
 
     public static void color(ViewportEvent.ComputeFogColor event) {
-        if (com.redondoguibi.raydiance.client.pipeline.PipelineManager.directActive() || !Config.ENABLE_EFFECTS.get() || !Config.FOG_CUSTOM_COLOR.get()
+        if (com.redondoguibi.raydiance.client.pipeline.PipelineManager.shadersRequested() || !Config.ENABLE_EFFECTS.get() || !Config.FOG_CUSTOM_COLOR.get()
                 || event.getCamera().getFluidInCamera() != FogType.NONE) {
             return;
         }

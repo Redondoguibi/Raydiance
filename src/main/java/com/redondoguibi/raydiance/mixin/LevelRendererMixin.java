@@ -12,7 +12,7 @@ abstract class LevelRendererMixin {
     @org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final
     private it.unimi.dsi.fastutil.objects.ObjectArrayList<net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection> visibleSections;
     @Inject(method="renderLevel",at=@At("HEAD"))
-    private void raydiance$begin(DeltaTracker dt,boolean outline,Camera camera,GameRenderer game,LightTexture light,Matrix4f view,Matrix4f projection,CallbackInfo ci){VisualPostProcessor.beginFrame(view,projection);ShadowMapRenderer.begin();}
+    private void raydiance$begin(DeltaTracker dt,boolean outline,Camera camera,GameRenderer game,LightTexture light,Matrix4f view,Matrix4f projection,CallbackInfo ci){VisualPostProcessor.beginFrame(view,projection,dt.getGameTimeDeltaPartialTick(false));ShadowMapRenderer.begin();}
     @Inject(method="renderLevel",at=@At("TAIL"))
     private void raydiance$finish(DeltaTracker dt,boolean outline,Camera camera,GameRenderer game,LightTexture light,Matrix4f view,Matrix4f projection,CallbackInfo ci){VisualPostProcessor.render(dt.getGameTimeDeltaPartialTick(false));}
     @Inject(method="renderSectionLayer",at=@At("HEAD"),require=0)

@@ -15,13 +15,21 @@ public final class ProfileRules {
         }
     }
     private static boolean selector(String filter, String value) { return "*".equals(filter) || filter.equals(value); }
+    private static final Comparator<Rule> ORDER = Comparator.comparingInt(Rule::priority).reversed().thenComparing(Rule::name);
+
     public static Rule select(List<Rule> rules, Context context) {
-        return rules.stream().filter(r -> r.matches(context))
-                .sorted(Comparator.comparingInt(Rule::priority).reversed().thenComparing(Rule::name))
-                .findFirst().orElse(null);
+        Rule best = null;
+        for (Rule rule : rules) {
+            if (rule.matches(context) && (best == null || ORDER.compare(rule, best) < 0)) best = rule;
+        }
+        return best;
     }
     public static double blend(double current, double target, double seconds, double elapsed) {
-        return seconds <= 0 ? target : current + (target - current) * -Math.expm1(-Math.max(0, elapsed) / seconds);
+        return seconds <= 0 ? target : current + (target - current) * blendFactor(seconds, elapsed);
+    }
+
+    static double blendFactor(double seconds, double elapsed) {
+        return -Math.expm1(-Math.max(0, elapsed) / seconds);
     }
     private ProfileRules() {}
 }

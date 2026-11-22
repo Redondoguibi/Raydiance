@@ -3,7 +3,6 @@ package com.redondoguibi.raydiance.client.gui;
 import com.redondoguibi.raydiance.Config;
 import com.redondoguibi.raydiance.client.profile.DynamicProfiles;
 import com.redondoguibi.raydiance.client.profile.SettingsOptions;
-import com.redondoguibi.raydiance.client.pipeline.PackBackend;
 import com.redondoguibi.raydiance.client.pipeline.PipelineManager;
 import com.redondoguibi.raydiance.client.render.VisualPostProcessor;
 import com.redondoguibi.raydiance.client.shaders.PackOptionStore;
@@ -35,8 +34,7 @@ public final class RaydianceScreen extends Screen {
         TERRAIN("terrain", "atmosphere","contactShadows","water","reflections","wind","fogDistance"),
         QUALITY("imageQuality", "Quality","FXAA"), FOG("fog", "Custom fog color","Fog red","Fog green","Fog blue"),
         PROFILES("Dynamic profiles", "Dynamic profiles","Edit profiles","Transition (s)","Reload profiles"),
-        MATERIALS("Materiais DX12", "materialSpecular","materialWetness","materialEmissive","waterAbsorption"),
-        PACK_SETTINGS("packSettings"), LIBRARY("library"), HLSL("terrainPass");
+        LIBRARY("library");
 
         final String label;
         final String[] controls;
@@ -65,8 +63,7 @@ public final class RaydianceScreen extends Screen {
         SettingsOptions.numbers().values().forEach(this::remember);
         for (ConfigValue<?> v : List.of(Config.ENABLE_EFFECTS, Config.DYNAMIC_PROFILES, Config.TRANSITION_SECONDS,
                 Config.FXAA, Config.QUALITY, Config.FOG_CUSTOM_COLOR, Config.FOG_RED, Config.FOG_GREEN,
-                Config.FOG_BLUE, Config.OPENGL_PACK, Config.PACK_BACKEND, Config.DIRECT_SHADER, Config.ENABLE_DIRECT_INTEGRATION,
-                Config.DIRECT_DETAIL)) remember(v);
+                Config.FOG_BLUE, Config.OPENGL_PACK, Config.ENABLE_DIRECT_INTEGRATION)) remember(v);
 
         panelWidth = Math.min(400, width - 20);
         left = (width - panelWidth) / 2;
@@ -83,15 +80,13 @@ public final class RaydianceScreen extends Screen {
         if (area == Area.PACK && pack == null && page != Page.LIBRARY) page = Page.HOME;
         switch (page) {
             case HOME -> home();
-            case PACK_SETTINGS -> categories();
-            case COLORS, LIGHT, TERRAIN, MATERIALS -> {
+            case COLORS, LIGHT, TERRAIN -> {
                 for (int i=0; i<page.controls.length; i++) number(page.controls[i], i);
             }
             case QUALITY -> quality();
             case FOG -> fog();
             case PROFILES -> profiles();
             case LIBRARY -> library();
-            case HLSL -> hlsl();
         }
 
         if (page != Page.HOME) {
@@ -122,23 +117,15 @@ public final class RaydianceScreen extends Screen {
                         choose("packHeading", PackRepository.list(), Config.OPENGL_PACK.get(), id -> {
                             Config.OPENGL_PACK.set(id);
                             VisualPostProcessor.reload();
-                            DirectShaderBridge.refresh();
                         })));
                 var options = rowButton("packOptions", 2, () -> {
                     trackPack();
                     minecraft.setScreen(new PackOptionsScreen(this, pack));
                 });
                 options.active = pack != null && (!pack.shaderOptions().isEmpty() || !pack.presets().isEmpty());
-                link(Page.PACK_SETTINGS,3).active = pack != null;
-                rowButton("library",4, () -> open(Page.LIBRARY));
-                rowButton("diagnostics",5, () -> diagnostics(VisualPostProcessor.diagnostic()));
-                var backend = PackBackend.parse(Config.PACK_BACKEND.get());
-                wide("packBackend", SettingsHelp.text("backend." + backend.id()), 3, () -> {
-                    Config.PACK_BACKEND.set(backend.next().id());
-                    VisualPostProcessor.reload();
-                    DirectShaderBridge.refresh();
-                    rebuildWidgets();
-                });
+                toggle("enableShaderpacks", Config.ENABLE_DIRECT_INTEGRATION, 4);
+                rowButton("library",6, () -> open(Page.LIBRARY));
+                rowButton("diagnostics",7, () -> diagnostics(VisualPostProcessor.diagnostic()));
             }
             case DIRECT -> {
                 var container = ModList.get().getModContainerById("direct");
@@ -148,31 +135,20 @@ public final class RaydianceScreen extends Screen {
                 direct.active = factory.isPresent() && (parent == null ||
                         !parent.getClass().getName().equals("com.redondoguibi.direct.DirectScreen"));
                 if (!direct.active && factory.isPresent()) direct.setTooltip(Tooltip.create(SettingsHelp.text("finishDirectNavigation")));
-                wide("terrainPass", null, 1, () -> open(Page.HLSL)).active = container.isPresent();
-                if (container.isPresent()) wide("diagnostics", null, 2, () -> diagnostics(DirectShaderBridge.status()));
+                if (container.isPresent()) wide("diagnostics", null, 1, () -> diagnostics(DirectShaderBridge.status()));
             }
         }
     }
 
-    private void categories() {
-        link(Page.COLORS,0); link(Page.LIGHT,1);
-        link(Page.TERRAIN,2); link(Page.MATERIALS,3);
-        link(Page.QUALITY,4);
-        rowButton("resetPack",5, () -> { trackPack(); PackOptionStore.live().reset(pack); message=SettingsHelp.text("defaultsPreview"); });
-    }
-
     private void quality() {
-        var store = PackOptionStore.live();
-        int current = pack == null ? Config.QUALITY.get() : store.quality(pack);
-        boolean fxaa = pack == null ? Config.FXAA.get() : store.fxaa(pack);
-        wide("Quality", SettingsHelp.text(switch(current) { case 0 -> "low"; case 2 -> "high"; default -> "medium"; }), 0, () -> {
-            if (pack == null) Config.QUALITY.set((current+1)%3);
-            else { trackPack(); store.modes(pack,(current+1)%3,fxaa); }
+        int current = Config.QUALITY.get();
+        boolean fxaa = Config.FXAA.get();
+        wide("Quality", SettingsHelp.text(switch (current) { case 0 -> "low"; case 2 -> "high"; default -> "medium"; }), 0, () -> {
+            Config.QUALITY.set((current + 1) % 3);
             rebuildWidgets();
         });
         wide("FXAA", onOff(fxaa), 1, () -> {
-            if (pack == null) Config.FXAA.set(!fxaa);
-            else { trackPack(); store.modes(pack,current,!fxaa); }
+            Config.FXAA.set(!fxaa);
             rebuildWidgets();
         });
     }
@@ -197,38 +173,19 @@ public final class RaydianceScreen extends Screen {
             Util.getPlatform().openFile(ShaderPackFiles.directory().toFile());
         }));
         wide("Reload shaders",null,1, () -> {
-            VisualPostProcessor.reload(true); DirectShaderBridge.refresh(); open(Page.HOME);
+            VisualPostProcessor.reload(true); open(Page.HOME);
         });
-        wide("Install multi-pass example",null,2, () -> files(() -> {
-            PackRepository.installPipelineExample(); message=SettingsHelp.text("packInstalled");
-        }));
-        wide("installProgramExample",null,3, () -> files(() -> {
-            PackRepository.installProgramExample(); message=SettingsHelp.text("packInstalled");
+        wide("installNativeExample", null, 2, () -> files(() -> {
+            PackRepository.installNativeExample();
+            message = SettingsHelp.text("packInstalled");
         }));
     }
 
-    private void hlsl() {
-        toggle("enablePass",Config.ENABLE_DIRECT_INTEGRATION,0);
-        rowButton("Reload DX12 pass",1, () -> { DirectShaderBridge.refresh(); message=SettingsHelp.text("reloadRequested"); });
-        wide("HLSL",displayId(Config.DIRECT_SHADER.get()),1, () -> files(() ->
-                choose("terrainPass", ShaderPackFiles.list(), Config.DIRECT_SHADER.get(), id -> {
-                    ShaderPackFiles.select(id);
-                    DirectShaderBridge.refresh();
-                })));
-        slider("Detalhe DX12",Config.DIRECT_DETAIL,0,1,4);
-        rowButton("Install HLSL example",5, () -> files(() -> {
-            ShaderPackFiles.installExample(); message=SettingsHelp.text("hlslInstalled");
-        }));
-    }
-
-    private void number(String key,int slot) {
+    private void number(String key, int slot) {
         var setting = SettingsOptions.numbers().get(key);
         var range = PackRepository.RANGES.get(key);
-        double current = pack == null ? setting.get() : PackOptionStore.live().engine(pack,key);
-        slider(Component.translatable("raydiance.configuration."+key),key,current,range[0],range[1],slot, value -> {
-            if (pack == null) setting.set(value);
-            else { trackPack(); PackOptionStore.live().engine(pack,key,value); }
-        });
+        slider(Component.translatable("raydiance.configuration." + key), key, setting.get(),
+                range[0], range[1], slot, setting::set);
     }
 
     private void slider(String label, DoubleValue setting, double min, double max, int slot) {
@@ -281,8 +238,7 @@ public final class RaydianceScreen extends Screen {
     private void open(Page target) { page=target; message=Component.empty(); rebuildWidgets(); }
 
     private void back() {
-        if (area == Area.PACK && page.controls.length > 0) open(Page.PACK_SETTINGS);
-        else open(Page.HOME);
+        open(Page.HOME);
     }
 
     private void diagnostics(String detail) {
@@ -342,7 +298,7 @@ public final class RaydianceScreen extends Screen {
     private void save() {
         try {
             for (var edited : editedPacks.values()) PackOptionStore.live().save(edited);
-            Config.SPEC.save(); DirectShaderBridge.refresh(); minecraft.setScreen(parent);
+            Config.SPEC.save(); minecraft.setScreen(parent);
         } catch (Exception ex) { message = Component.translatable("raydiance.ui.saveError",ex.getMessage()); }
     }
 
@@ -350,7 +306,7 @@ public final class RaydianceScreen extends Screen {
     private void cancel() {
         initial.forEach((k,v) -> ((ConfigValue)k).set(v));
         initialPackOptions.forEach((id,values) -> PackOptionStore.live().restore(editedPacks.get(id),values));
-        VisualPostProcessor.reload(); DirectShaderBridge.refresh(); minecraft.setScreen(parent);
+        VisualPostProcessor.reload(); minecraft.setScreen(parent);
     }
 
     @Override public void onClose() {
@@ -360,18 +316,18 @@ public final class RaydianceScreen extends Screen {
     private Component context() {
         if (!message.getString().isEmpty()) return message;
         return switch (area) {
-            case BASE -> PipelineManager.packSelected()
+            case BASE -> PipelineManager.shadersRequested()
                     ? Component.translatable("raydiance.ui.basePaused", Config.OPENGL_PACK.get())
                     : SettingsHelp.text("baseContext");
             case PACK -> {
                 if (PipelineManager.packSelected() && pack == null)
                     yield Component.literal(com.redondoguibi.raydiance.client.shaders.ShaderErrors.summary(PipelineManager.status(),2).replace("\n"," · "));
                 if (pack == null) yield SettingsHelp.text("packContext");
-                String reason = PipelineManager.decision().reason();
+                String reason = PipelineManager.reason();
                 yield Component.translatable("raydiance.ui.editingPack",pack.title()).copy().append(reason.isEmpty() ? "" : " · " + reason);
             }
             case DIRECT -> SettingsHelp.text(!ModList.get().isLoaded("direct") ? "directMissing"
-                    : page == Page.HLSL ? "passContext" : "directContext");
+                    : "directContext");
         };
     }
 

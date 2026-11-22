@@ -45,6 +45,28 @@ class GraphicsPipelineTest {
         }
         assertEquals(GL11.GL_NO_ERROR,GL11.glGetError());
     }
+    @Test void scopedStateRestoresWrittenTextureUnitsAndActiveUnit() {
+        int original = GL11.glGenTextures();
+        int replacement = GL11.glGenTextures();
+        try {
+            GL13.glActiveTexture(GL13.GL_TEXTURE0);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, original);
+            GL13.glActiveTexture(GL13.GL_TEXTURE3);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, original);
+            try (GlState state = new GlState(1)) {
+                assertEquals(GL13.GL_TEXTURE0, GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE));
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, replacement);
+            }
+            assertEquals(GL13.GL_TEXTURE3, GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE));
+            assertEquals(original, GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D));
+            GL13.glActiveTexture(GL13.GL_TEXTURE0);
+            assertEquals(original, GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D));
+            assertEquals(GL11.GL_NO_ERROR, GL11.glGetError());
+        } finally {
+            GL11.glDeleteTextures(original);
+            GL11.glDeleteTextures(replacement);
+        }
+    }
     @Test void copiesVanillaAndStencilDepthFormatsExactly(){
         try(GlState state=new GlState()){
             for(int format:new int[]{GL14.GL_DEPTH_COMPONENT24,GL30.GL_DEPTH_COMPONENT32F,GL30.GL_DEPTH24_STENCIL8,GL30.GL_DEPTH32F_STENCIL8}){

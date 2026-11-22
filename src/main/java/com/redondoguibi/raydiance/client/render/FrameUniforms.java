@@ -6,7 +6,7 @@ import com.redondoguibi.raydiance.client.shaders.PackOptionStore;
 import com.redondoguibi.raydiance.client.shaders.PackRepository;
 import com.redondoguibi.raydiance.client.shaders.ProgramDirectives;
 import com.redondoguibi.raydiance.client.shaders.ShaderOption;
-import com.redondoguibi.raydiance.compat.direct.DirectShaderBridge;
+import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.world.effect.MobEffects;
@@ -42,29 +42,28 @@ public final class FrameUniforms {
     static final Matrix4f view=new Matrix4f(),projection=new Matrix4f(),inverseView=new Matrix4f(),inverseProjection=new Matrix4f();
     private static final Matrix4f shadowViewInverse=new Matrix4f(),shadowProjectionInverse=new Matrix4f();
     static final FrameHistory history=new FrameHistory();
-    private static final Map<String,Float> engine=new HashMap<>();
+    private static final Object2FloatOpenHashMap<String> engine = new Object2FloatOpenHashMap<>();
+    private static final Vector3d historyPosition = new Vector3d();
     private static final Vector3f sun=new Vector3f(),up=new Vector3f(),moon=new Vector3f(),shadowLight=new Vector3f();
     private static float partial,daylight,rain,thunder,time,sunAngle,far,screenBrightness,nightVision,blindness,darkness;
     private static int worldTime,worldDay,moonPhase,eyeInWater,steps,fxaa;
-    private static boolean skyLight,openAir,nativeShadows,skyDirty,eyeDirty;
+    private static boolean skyLight,openAir,skyDirty,eyeDirty;
     private static final float[] sky=new float[3],eye=new float[2],fog=new float[4];
     private static int bloomTexture,noise,black;
-    private static PackRepository.Pack pack=PackRepository.NONE;
 
     public static void beginFrame(Matrix4f rotation,Matrix4f proj){
         view.set(rotation);projection.set(proj);inverseProjection.set(proj).invert();inverseView.set(rotation).invert();
         var mc=Minecraft.getInstance();var position=mc.gameRenderer.getMainCamera().getPosition();
         var block=mc.gameRenderer.getMainCamera().getBlockPosition();
-        history.update(mc.level,System.nanoTime(),proj,rotation,new Vector3d(position.x,position.y,position.z),mc.level.getRainLevel(0),
+history.update(mc.level,System.nanoTime(),proj,rotation,historyPosition.set(position.x,position.y,position.z),mc.level.getRainLevel(0),
                 mc.level.getBrightness(LightLayer.BLOCK,block)/15f,mc.level.getBrightness(LightLayer.SKY,block)/15f);
     }
     /** Computes shared per-frame values once; called before any pass of the frame is drawn. */
     public static void update(float partialTicks){
         var mc=Minecraft.getInstance();var level=mc.level;partial=partialTicks;
-        pack=PackRepository.active();
         for(String key:PackRepository.RANGES.keySet())engine.put(key,VisualPostProcessor.value(key));
         var camera=mc.gameRenderer.getMainCamera();var fluid=camera.getFluidInCamera();
-        skyLight=level.dimensionType().hasSkyLight();openAir=fluid==FogType.NONE;nativeShadows=DirectShaderBridge.nativeGeometryActive();
+        skyLight=level.dimensionType().hasSkyLight();openAir=fluid==FogType.NONE;
         eyeInWater=fluid==FogType.WATER?1:fluid==FogType.LAVA?2:fluid==FogType.POWDER_SNOW?3:0;
         float angle=level.getSunAngle(partial);
         sun.set(-(float)Math.sin(angle),(float)Math.cos(angle),0);view.transformDirection(sun);
@@ -88,7 +87,7 @@ public final class FrameUniforms {
         if(ShadowMapRenderer.ready()){shadowViewInverse.set(ShadowMapRenderer.lightView()).invert();shadowProjectionInverse.set(ShadowMapRenderer.lightProjection()).invert();}
     }
     static void bloom(int texture){bloomTexture=texture;}
-    private static float v(String key){return engine.getOrDefault(key,0f);}
+    private static float v(String key){return engine.getFloat(key);}
     private static float[] sky(){
         if(skyDirty){var mc=Minecraft.getInstance();var c=mc.level.getSkyColor(mc.gameRenderer.getMainCamera().getPosition(),partial);sky[0]=(float)c.x;sky[1]=(float)c.y;sky[2]=(float)c.z;skyDirty=false;}
         return sky;
@@ -103,7 +102,8 @@ public final class FrameUniforms {
     // Registry ---------------------------------------------------------------------------------------------------
     private static void put(int type,String names,Binder binder){for(String n:names.split(" "))ENTRIES.put(n,new Entry(type,binder,null));}
     private static void sampler(String names,Sampler sampler){for(String n:names.split(" "))ENTRIES.put(n,new Entry(GL20.GL_SAMPLER_2D,null,sampler));}
-    private static void f(String names,java.util.function.Supplier<Float> s){put(GL20.GL_FLOAT,names,(p,l,x)->p.set1f(l,s.get()));}
+    @FunctionalInterface private interface FloatSupplier { float getAsFloat(); }
+    private static void f(String names, FloatSupplier s){put(GL20.GL_FLOAT,names,(p,l,x)->p.set1f(l,s.getAsFloat()));}
     private static void i(String names,java.util.function.IntSupplier s){put(GL20.GL_INT,names,(p,l,x)->p.set1i(l,s.getAsInt()));}
     private static void m(String names,java.util.function.Supplier<Matrix4f> s){put(GL20.GL_FLOAT_MAT4,names,(p,l,x)->p.setMatrix(l,s.get()));}
     private static void v3(String names,java.util.function.Supplier<Vector3f> s,float scale){put(GL20.GL_FLOAT_VEC3,names,(p,l,x)->{var q=s.get();p.set3f(l,q.x*scale,q.y*scale,q.z*scale);});}
@@ -143,7 +143,7 @@ public final class FrameUniforms {
         f("Saturation",()->v("saturation"));f("Contrast",()->v("contrast"));f("Brightness",()->v("brightness"));f("Exposure",()->v("exposure"));
         f("Gamma",()->v("gamma"));f("Temperature",()->v("temperature"));f("Vignette",()->v("vignette"));f("Strength",()->v("strength"));
         f("Bloom",()->v("bloom"));f("Atmosphere",()->skyLight?v("atmosphere"):0);
-        f("Shadows",()->skyLight&&!nativeShadows?v("contactShadows"):0);
+        f("Shadows",()->skyLight?v("contactShadows"):0);
         f("Ssao",()->v("ssao"));f("GodRays",()->skyLight&&openAir?v("godRays"):0);
         f("Sharpen",()->v("sharpen"));f("ToneMapping",()->v("toneMapping"));
         i("Fxaa",()->fxaa);i("Steps",()->steps);
@@ -193,9 +193,14 @@ public final class FrameUniforms {
                 samplers.toArray(Sampler[]::new),units.stream().mapToInt(Integer::intValue).toArray(),
                 optionLocations.stream().mapToInt(Integer::intValue).toArray(),options.toArray(ShaderOption[]::new),owner);
     }
+    /** Number of consecutive texture units touched by a prepared program, beginning at unit zero. */
+    static int textureUnits(GlProgram program) {
+        return ((Plan) program.plan).samplers.length;
+    }
+
     /** Uploads the program's active uniforms and binds its textures. The program must be current. */
     static void bind(GlProgram program,Pass pass){
-        if(!(program.plan instanceof Plan))prepare(program,pack);
+        if(!(program.plan instanceof Plan))prepare(program,PackRepository.NONE);
         Plan plan=(Plan)program.plan;
         for(int i=0;i<plan.locations.length;i++)plan.binders[i].bind(program,plan.locations[i],pass);
         for(int i=0;i<plan.samplers.length;i++){GL13.glActiveTexture(GL13.GL_TEXTURE0+plan.units[i]);GL11.glBindTexture(GL11.GL_TEXTURE_2D,plan.samplers[i].texture(pass));}

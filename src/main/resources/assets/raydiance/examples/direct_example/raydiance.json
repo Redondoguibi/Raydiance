@@ -1,0 +1,16 @@
+{
+  "format": 4,
+  "name": "Direct Shader Example",
+  "geometry": { "file": "geometry.hlsl", "translucent": true, "sceneInputs": true },
+  "terrainPasses": ["terrain.hlsl"],
+  "worldPasses": [{ "file": "grade.hlsl", "target": "rgba16f" }, "final.hlsl"],
+  "shaderOptions": [
+    { "key": "tint", "label": "Warm tint", "category": "World / Color", "uniform": "PackTint",
+      "min": 0, "max": 1, "step": 0.05, "default": 0.25 },
+    { "key": "refraction", "label": "Refraction", "category": "Terrain / Water", "uniform": "PackRefraction",
+      "min": 0, "max": 1, "step": 0.05, "default": 0.15 }
+  ],
+  "presets": [
+    { "name": "Neutral", "shaderValues": { "tint": 0, "refraction": 0 } }
+  ]
+}

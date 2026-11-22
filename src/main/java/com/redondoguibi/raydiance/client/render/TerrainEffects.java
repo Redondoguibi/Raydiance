@@ -9,7 +9,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.RegisterShadersEvent;
-import org.joml.Matrix4f;
 import java.util.*;
 
 /** Optional vanilla terrain shader. Unknown/alternate renderers retain their own shaders. */
@@ -26,8 +25,8 @@ public final class TerrainEffects {
         catch(Exception ex){shader=null;Raydiance.LOGGER.error("Optional terrain effects unavailable",ex);}
         plants=List.of();
     }
-    public static boolean available(){return !com.redondoguibi.raydiance.client.pipeline.PipelineManager.directActive()&&shader!=null&&!conflict&&!nativeTerrain;}
-    public static String status(){return nativeTerrain?(com.redondoguibi.raydiance.compat.direct.DirectShaderBridge.nativeGeometryActive()?"Direct geometry effects: DX12":"Direct terrain: geometry effects not requested"):conflict?"Alternate terrain renderer: water/wind disabled":shader==null?"Terrain shader unavailable":"Vanilla terrain effects ready (OpenGL)";}
+    public static boolean available(){return !com.redondoguibi.raydiance.client.pipeline.PipelineManager.shadersRequested()&&shader!=null&&!conflict&&!nativeTerrain;}
+    public static String status(){return nativeTerrain?"Direct DX12 owns terrain":conflict?"Alternate terrain renderer: water/wind disabled":shader==null?"Terrain shader unavailable":"Vanilla terrain effects ready (OpenGL)";}
     private static float[] rect(net.minecraft.client.renderer.texture.TextureAtlasSprite s){return new float[]{s.getU0(),s.getV0(),s.getU1(),s.getV1()};}
     private static void rect(String name,float[] values){var u=shader.getUniform(name);if(u!=null)u.set(values);}
     public static ShaderInstance select(ShaderInstance original,RenderType layer){
@@ -52,7 +51,7 @@ public final class TerrainEffects {
         shader.safeGetUniform("AlphaCutoff").set(water?0f:layer==RenderType.cutout()?0.1f:0.5f);
         shader.safeGetUniform("Camera").set((float)(mc.gameRenderer.getMainCamera().getPosition().x%4096),
                 (float)(mc.gameRenderer.getMainCamera().getPosition().y%4096),(float)(mc.gameRenderer.getMainCamera().getPosition().z%4096));
-        shader.safeGetUniform("InverseProj").set(new Matrix4f(VisualPostProcessor.projection()).invert());
+        shader.safeGetUniform("InverseProj").set(FrameUniforms.inverseProjection);
         shader.safeGetUniform("ScreenSize").set((float)mc.getMainRenderTarget().width,(float)mc.getMainRenderTarget().height);
         shader.safeGetUniform("SceneReady").set(VisualPostProcessor.opaqueReady()?1f:0f);
         // ShaderInstance retains sampler IDs across frames. After reload/resize, never bind deleted snapshots

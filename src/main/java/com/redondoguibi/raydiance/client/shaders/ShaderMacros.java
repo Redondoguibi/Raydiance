@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  * macros, so packs cannot mistake it for a full gbuffer pipeline.</p>
  */
 public final class ShaderMacros {
-    public static final int VERSION = 10700;
+    public static final int VERSION = 10800;
     private static final Pattern VERSION_LINE = Pattern.compile("(?m)^\\s*#\\s*version\\b[^\\n]*\\n");
 
     public static Map<String, String> standard(String backend, int quality, String dimension, int format) {

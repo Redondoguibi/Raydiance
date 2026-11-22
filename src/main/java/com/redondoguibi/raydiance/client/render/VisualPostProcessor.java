@@ -18,8 +18,12 @@ public final class VisualPostProcessor {
     private static int opaqueFormat;
     private static boolean opaqueReady;
 
-    public static float value(String key){return Config.ENABLE_EFFECTS.get()?(float)DynamicProfiles.value(key):0;}
-    public static void beginFrame(Matrix4f rotation,Matrix4f proj){FrameUniforms.beginFrame(rotation,proj);opaqueReady=false;}
+    public static float value(String key){return PipelineManager.standaloneActive() ? (float) DynamicProfiles.value(key) : 0;}
+    public static void beginFrame(Matrix4f rotation, Matrix4f proj, float partialTicks) {
+        FrameUniforms.beginFrame(rotation, proj);
+        opaqueReady = false;
+        PipelineManager.prepareFrame(partialTicks);
+    }
     public static void idle(){
         if(opaque!=null||ShadowMapRenderer.ready())try(GlState state=new GlState()){releaseOpaque();ShadowMapRenderer.release();}
         PipelineManager.idle();
@@ -31,11 +35,11 @@ public final class VisualPostProcessor {
     public static Matrix4f projection(){return FrameUniforms.projection;}
     /** Before translucent terrain: snapshot only when GL water/reflections or a pack's depthtex1 needs it. */
     public static void captureOpaque(){
-        if(PipelineManager.directActive()){releaseOpaque();return;}
+        if(PipelineManager.shadersRequested()){releaseOpaque();return;}
         boolean terrain=RenderPlan.opaque(Config.ENABLE_EFFECTS.get(),TerrainEffects.available(),value("water"),value("reflections"));
-        if(!terrain&&!(Config.ENABLE_EFFECTS.get()&&PipelineManager.wantsOpaqueDepth())){releaseOpaque();return;}
+        if(!terrain){releaseOpaque();return;}
         var target=Minecraft.getInstance().getMainRenderTarget();
-        try(GlState state=new GlState()){
+        try (GlState state = new GlState(1)) {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D,target.getDepthTextureId());
             int format=GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D,0,GL11.GL_TEXTURE_INTERNAL_FORMAT);
             if(opaque==null||opaque.width!=target.width||opaque.height!=target.height||opaqueFormat!=format){
@@ -48,7 +52,7 @@ public final class VisualPostProcessor {
     }
     public static void render(float partialTicks){
         if(Minecraft.getInstance().level==null)return;
-        if(PipelineManager.directActive()||!Config.ENABLE_EFFECTS.get()){
+        if(PipelineManager.shadersRequested()||!Config.ENABLE_EFFECTS.get()){
             if(opaque!=null||ShadowMapRenderer.ready())try(GlState state=new GlState()){releaseOpaque();ShadowMapRenderer.release();}
         }
         PipelineManager.render(partialTicks);

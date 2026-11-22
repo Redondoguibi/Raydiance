@@ -60,21 +60,33 @@ public final class DynamicProfiles {
         if (mc.level == null || mc.player == null) { world=null; blended.clear(); last=0; return; }
         if (!loaded) reload();
         if (world != mc.level) { world=mc.level; blended.clear(); last=0; }
-        String biome = mc.level.getBiome(mc.player.blockPosition()).unwrapKey().map(k->k.location().toString()).orElse("");
-        var context = new ProfileRules.Context(mc.level.dimension().location().toString(),biome,
-                mc.level.isThundering()?"thunder":mc.level.isRaining()?"rain":"clear", (int)(mc.level.getDayTime()%24000));
-        ProfileRules.Rule rule = Config.DYNAMIC_PROFILES.get()?ProfileRules.select(rules,context):null;
+        ProfileRules.Rule rule = null;
+        if (Config.DYNAMIC_PROFILES.get() && !rules.isEmpty()) {
+            String biome = mc.level.getBiome(mc.player.blockPosition()).unwrapKey().map(k -> k.location().toString()).orElse("");
+            var context = new ProfileRules.Context(mc.level.dimension().location().toString(), biome,
+                    mc.level.isThundering() ? "thunder" : mc.level.isRaining() ? "rain" : "clear",
+                    (int) (mc.level.getDayTime() % 24000));
+            rule = ProfileRules.select(rules, context);
+        }
         status = rule == null?"Base":rule.name();
         long now=System.nanoTime(); double dt=last==0?0.05:Math.min(0.25,(now-last)/1e9); last=now;
+        double transitionSeconds = Config.TRANSITION_SECONDS.get();
+        boolean immediate = transitionSeconds <= 0;
+        double factor = immediate ? 1 : ProfileRules.blendFactor(transitionSeconds, dt);
         for (String key : PackRepository.RANGES.keySet()) {
-            double base = base(key), target=rule==null?base:rule.values().getOrDefault(key,base);
-            blended.put(key,ProfileRules.blend(blended.getOrDefault(key,base),target,Config.TRANSITION_SECONDS.get(),dt));
+            double base = base(key), target = rule == null ? base : rule.values().getOrDefault(key, base);
+            double current = blended.getOrDefault(key, base);
+            blended.put(key, immediate ? target : current + (target - current) * factor);
         }
     }
-    public static double value(String key) { if(com.redondoguibi.raydiance.client.pipeline.PipelineManager.packSelected())return com.redondoguibi.raydiance.client.pipeline.PipelineManager.value(key); return Config.DYNAMIC_PROFILES.get()?blended.getOrDefault(key,base(key)):base(key); }
+    public static double value(String key) {
+        Double value = Config.DYNAMIC_PROFILES.get() ? blended.get(key) : null;
+        return value == null ? base(key) : value;
+    }
+
     private static double base(String key) {
-        Double override=Config.USE_PACK_DEFAULTS.get()&&PackRepository.active().id().equals(Config.OPENGL_PACK.get())?PackRepository.active().options().get(key):null;
-        return override==null?SettingsOptions.number(key):override;
+        var setting = SettingsOptions.numbers().get(key);
+        return setting == null ? 0 : setting.get();
     }
     private DynamicProfiles() {}
 }

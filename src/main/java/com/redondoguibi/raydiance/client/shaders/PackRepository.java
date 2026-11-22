@@ -31,6 +31,41 @@ public final class PackRepository {
     private static final Pattern FOLDER = Pattern.compile("[A-Za-z0-9_-]{1,48}");
     private static final Map<String,String> WORLD_FOLDERS = Map.of("minecraft:overworld","world0","minecraft:the_nether","world-1","minecraft:the_end","world1");
 
+    /**
+     * A native pass. World passes may name their render targets ({@code "color"} is the chain output, other
+     * names are {@link NativeBuffer}s) and run as compute shaders; empty outputs mean the chain color only.
+     */
+    public record NativePass(String file, String source, boolean hdr, List<String> whenAny, List<String> outputs, boolean compute) {
+        public NativePass { whenAny = List.copyOf(whenAny); outputs = List.copyOf(outputs); }
+        public NativePass(String file, String source, boolean hdr, List<String> whenAny) { this(file, source, hdr, whenAny, List.of(), false); }
+    }
+    /** A named world buffer (Direct pack buffer {@code index}): format, size relative to the screen, history, clearing. */
+    public record NativeBuffer(String name, int index, String format, double scale, boolean history, boolean clear) {}
+    public record Geometry(String file, String source, boolean translucent, boolean sceneInputs, boolean shadows, List<String> translucentWhenAny) {
+        public Geometry { translucentWhenAny = List.copyOf(translucentWhenAny); }
+    }
+    /**
+     * @param buffers named world buffers in declaration order
+     * @param terrainDepth whether world passes read Direct's terrain-only depth
+     * @param replaceVanilla vanilla world features the pack draws itself ({@code sky}, {@code clouds})
+     */
+    public record NativePrograms(List<NativePass> terrain, List<NativePass> world, Geometry geometry,
+                                 List<NativeBuffer> buffers, boolean terrainDepth, List<String> replaceVanilla) {
+        public NativePrograms {
+            terrain = List.copyOf(terrain);
+            world = List.copyOf(world);
+            buffers = List.copyOf(buffers);
+            replaceVanilla = List.copyOf(replaceVanilla);
+        }
+        public NativePrograms(List<NativePass> terrain, List<NativePass> world, Geometry geometry) {
+            this(terrain, world, geometry, List.of(), false, List.of());
+        }
+        public boolean usesGraph() { return !buffers.isEmpty() || terrainDepth || world.stream().anyMatch(p -> p.compute() || !p.outputs().isEmpty()); }
+    }
+    public static final List<String> BUFFER_FORMATS = List.of("rgba8", "rgba16f", "rgba32f", "r11g11b10f", "rg16f", "r16f", "r32f", "rgba16", "rg8", "r8");
+    public static final List<String> REPLACEABLE = List.of("sky", "clouds");
+    private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,31}");
+
     public record Pass(String file, String source, double scale, boolean floatingPoint, String when) {}
     public record BufferSpec(int index, ProgramDirectives.BufferFormat format, double scale, boolean clear, float[] clearColor, boolean mipmap) {
         public long bytes(int width,int height){
@@ -45,7 +80,13 @@ public final class PackRepository {
     }
     public record Pack(String id,String title,int format,Map<String,Double> options,String composite,List<Pass> passes,
                        List<Program> programs,Map<Integer,BufferSpec> buffers,boolean builtinEffects,String hlsl,
-                       Map<Integer,String> sourceNames,List<ShaderOption> shaderOptions,List<ShaderPreset> presets) {
+                       Map<Integer,String> sourceNames,List<ShaderOption> shaderOptions,List<ShaderPreset> presets,
+                       NativePrograms nativePrograms) {
+        public Pack(String id,String title,int format,Map<String,Double> options,String composite,List<Pass> passes,
+                    List<Program> programs,Map<Integer,BufferSpec> buffers,boolean builtinEffects,String hlsl,
+                    Map<Integer,String> sourceNames,List<ShaderOption> shaderOptions,List<ShaderPreset> presets) {
+            this(id,title,format,options,composite,passes,programs,buffers,builtinEffects,hlsl,sourceNames,shaderOptions,presets,null);
+        }
         public Pack(String id,String title,Map<String,Double> options,String composite) { this(id,title,options,composite,List.of()); }
         public Pack(String id,String title,Map<String,Double> options,String composite,List<Pass> passes) {this(id,title,options,composite,passes,List.of(),List.of());}
         public Pack(String id,String title,Map<String,Double> options,String composite,List<Pass> passes,List<ShaderOption> shaderOptions,List<ShaderPreset> presets) {
@@ -61,7 +102,7 @@ public final class PackRepository {
         /** Parameter-only packs use the built-in composite on either backend. */
         public boolean parameterOnly(){return !hasGlsl()&&hlsl==null&&uniformOptions().isEmpty();}
         public boolean canRunOpenGl(){return hasGlsl()||uniformOptions().isEmpty();}
-        public boolean canRunDirect(){return hlsl!=null||parameterOnly();}
+        public boolean canRunDirect(){return nativePrograms != null;}
     }
     public static final Pack NONE = new Pack("none","Custom settings",Map.of(),null);
     private static Pack active = NONE;
@@ -116,13 +157,14 @@ public final class PackRepository {
         try {
             JsonObject o=JsonParser.parseString(readText(dir.resolve(MANIFEST),65536)).getAsJsonObject();
             int format=(int)o.get("format").getAsDouble();
-            if(o.get("format").getAsDouble()!=format||format<1||format>3) throw new IOException("Unsupported pack format");
+            if(o.get("format").getAsDouble()!=format||format<1||format>4) throw new IOException("Unsupported pack format");
             String title=o.has("name")?o.get("name").getAsString():id;
             if(title.length()>80) throw new IOException("Pack title too long");
+            String overlay = overlay(o, dir, context.dimension());
+            if (format == 4) return nativePack(id, title, o, dir, overlay, context.language());
             Map<String,Double> options=new HashMap<>();
             if(o.has("options")) for(var e:o.getAsJsonObject("options").entrySet()) { double v=e.getValue().getAsDouble();validateOption(e.getKey(),v);options.put(e.getKey(),v); }
             ShaderSourceLoader loader=new ShaderSourceLoader(dir);
-            String overlay=overlay(o,dir,context.dimension());
             List<String> rawSources=new ArrayList<>();
             String composite=null;
             if(format==1&&loader.exists(pick(loader,overlay,"composite.fsh")))rawSources.add(composite=loader.load(pick(loader,overlay,"composite.fsh")));
@@ -176,6 +218,201 @@ public final class PackRepository {
                     hlsl,loader.sourceNames(),definitions,ShaderPreset.parse(o,definitions));
         } catch(RuntimeException e) { throw new IOException("Invalid manifest: "+e.getMessage(),e); }
     }
+    private static Pack nativePack(String id, String title, JsonObject manifest, Path dir, String overlay, String language)
+            throws IOException {
+        if (manifest.has("options") || manifest.has("builtinEffects")) {
+            throw new IOException("Format 4 uses shaderOptions and HLSL for effects");
+        }
+        var loader = new ShaderSourceLoader(dir, ShaderSourceLoader.Dialect.HLSL);
+        var terrain = nativePasses(manifest, "terrainPasses", loader, overlay);
+        var world = nativePasses(manifest, "worldPasses", loader, overlay);
+        var buffers = nativeBuffers(manifest);
+        validateGraph(world, buffers);
+        boolean terrainDepth = flag(manifest, "terrainDepth");
+        var replaceVanilla = new ArrayList<String>();
+        if (manifest.has("replaceVanilla")) {
+            for (var entry : manifest.getAsJsonArray("replaceVanilla")) {
+                String feature = entry.getAsString();
+                if (!REPLACEABLE.contains(feature)) throw new IOException("replaceVanilla supports " + REPLACEABLE + ": " + feature);
+                if (!replaceVanilla.contains(feature)) replaceVanilla.add(feature);
+            }
+            if (!replaceVanilla.isEmpty() && world.isEmpty()) throw new IOException("replaceVanilla requires worldPasses");
+        }
+        if (terrainDepth && world.isEmpty()) throw new IOException("terrainDepth requires worldPasses");
+        Geometry geometry = null;
+        if (manifest.has("geometry")) {
+            var program = manifest.getAsJsonObject("geometry");
+            String file = program.get("file").getAsString();
+            boolean translucent = flag(program, "translucent");
+            boolean sceneInputs = flag(program, "sceneInputs");
+            if (sceneInputs && !translucent) throw new IOException("geometry.sceneInputs requires translucent");
+            var condition = conditionKeys(program, "translucentWhenAny");
+            if (!condition.isEmpty() && !translucent) throw new IOException("translucentWhenAny requires translucent");
+            geometry = new Geometry(file, nativeSource(file, loader, overlay), translucent, sceneInputs, flag(program, "shadows"), condition);
+        }
+        if (terrain.isEmpty() && world.isEmpty() && geometry == null) {
+            throw new IOException("Format 4 requires terrainPasses, worldPasses or geometry");
+        }
+        var sources = new ArrayList<String>();
+        terrain.forEach(pass -> sources.add(pass.source()));
+        world.forEach(pass -> sources.add(pass.source()));
+        if (geometry != null) sources.add(geometry.source());
+        var options = new ArrayList<>(ShaderOption.parse(manifest));
+        if (options.size() > 32) throw new IOException("At most 32 HLSL uniform options");
+        Map<String, String> categories = new HashMap<>();
+        if (manifest.has("defineCategories")) {
+            manifest.getAsJsonObject("defineCategories").entrySet().forEach(e -> categories.put(e.getKey(), e.getValue().getAsString()));
+        }
+        options.addAll(DefineOptions.options(DefineOptions.discover(sources), PackLang.load(dir, language), categories));
+        for (var pass : world) validateCondition(pass.whenAny(), options);
+        if (geometry != null) validateCondition(geometry.translucentWhenAny(), options);
+        var presets = ShaderPreset.parse(manifest, options);
+        if (manifest.has("presets") && java.util.stream.StreamSupport.stream(
+                manifest.getAsJsonArray("presets").spliterator(), false).map(JsonElement::getAsJsonObject)
+                .anyMatch(preset -> preset.has("options") || preset.has("quality") || preset.has("fxaa"))) {
+            throw new IOException("Format 4 presets use shaderValues");
+        }
+        return new Pack(id, title, 4, Map.of(), null, List.of(), List.of(), Map.of(), false, null,
+                loader.sourceNames(), options, presets, new NativePrograms(terrain, world, geometry, buffers, terrainDepth, replaceVanilla));
+    }
+
+    private static List<String> conditionKeys(JsonObject object, String name) throws IOException {
+        if (!object.has(name)) return List.of();
+        if (!object.get(name).isJsonArray() || object.getAsJsonArray(name).isEmpty())
+            throw new IOException(name + " requires a nonempty array of option keys");
+        var keys = new ArrayList<String>();
+        for (var key : object.getAsJsonArray(name)) {
+            if (!key.isJsonPrimitive() || !key.getAsJsonPrimitive().isString()) throw new IOException("Expected an option key");
+            keys.add(key.getAsString());
+        }
+        return keys;
+    }
+
+    private static void validateCondition(List<String> keys, List<ShaderOption> options) throws IOException {
+        for (String key : keys) {
+            var option = options.stream().filter(o -> o.key().equals(key)).findFirst()
+                    .orElseThrow(() -> new IOException("Unknown pass condition option: " + key));
+            for (String choice : option.choices()) {
+                try {
+                    if (Double.isFinite(Double.parseDouble(choice))) continue;
+                } catch (NumberFormatException ignored) {}
+                throw new IOException("Pass conditions require numeric choices: " + key);
+            }
+        }
+    }
+
+    private static List<NativeBuffer> nativeBuffers(JsonObject manifest) throws IOException {
+        if (!manifest.has("buffers")) return List.of();
+        if (!manifest.get("buffers").isJsonObject()) throw new IOException("buffers must map names to buffer objects");
+        var result = new ArrayList<NativeBuffer>();
+        for (var entry : manifest.getAsJsonObject("buffers").entrySet()) {
+            String name = entry.getKey();
+            if (!IDENTIFIER.matcher(name).matches() || name.equals("color"))
+                throw new IOException("Buffer names must be HLSL identifiers other than color: " + name);
+            if (result.size() == 8) throw new IOException("At most eight world buffers");
+            if (!entry.getValue().isJsonObject()) throw new IOException("Buffer " + name + " must be an object");
+            var spec = entry.getValue().getAsJsonObject();
+            String format = spec.has("format") ? spec.get("format").getAsString() : "rgba8";
+            if (!BUFFER_FORMATS.contains(format)) throw new IOException("Unsupported buffer format " + format + "; use one of " + BUFFER_FORMATS);
+            double scale = spec.has("scale") ? spec.get("scale").getAsDouble() : 1;
+            if (!(scale >= 0.125 && scale <= 1)) throw new IOException("Buffer " + name + " scale must be between 0.125 and 1");
+            result.add(new NativeBuffer(name, result.size(), format, scale, flag(spec, "history"), flag(spec, "clear")));
+        }
+        return result;
+    }
+
+    /** Mirrors Direct's world-graph checks so a pack fails at load with a readable message. */
+    private static void validateGraph(List<NativePass> world, List<NativeBuffer> buffers) throws IOException {
+        Map<String, NativeBuffer> byName = new HashMap<>();
+        buffers.forEach(buffer -> byName.put(buffer.name(), buffer));
+        for (var pass : world) {
+            var outputs = pass.outputs();
+            if (outputs.size() > 4) throw new IOException(pass.file() + ": a pass writes at most four targets");
+            if (new HashSet<>(outputs).size() != outputs.size()) throw new IOException(pass.file() + ": duplicate output");
+            if (outputs.indexOf("color") > 0) throw new IOException(pass.file() + ": color must be the first output");
+            boolean color = outputs.isEmpty() || outputs.contains("color");
+            if (pass.compute() && color) throw new IOException(pass.file() + ": compute passes write named buffers only");
+            Double scale = color ? 1.0 : null;
+            for (String output : outputs) {
+                if (output.equals("color")) continue;
+                var buffer = byName.get(output);
+                if (buffer == null) throw new IOException(pass.file() + " writes undeclared buffer " + output);
+                if (scale == null) scale = buffer.scale();
+                if (buffer.scale() != scale) throw new IOException(pass.file() + ": all outputs of a pass must have the same size");
+            }
+        }
+        if (!world.isEmpty()) {
+            var last = world.getLast();
+            if (last.compute() || !(last.outputs().isEmpty() || last.outputs().contains("color")))
+                throw new IOException("The final world pass must write color");
+        }
+    }
+
+    private static boolean flag(JsonObject object, String key) throws IOException {
+        if (!object.has(key)) return false;
+        if (!object.get(key).isJsonPrimitive() || !object.getAsJsonPrimitive(key).isBoolean())
+            throw new IOException("Expected boolean geometry." + key);
+        return object.get(key).getAsBoolean();
+    }
+
+    private static List<NativePass> nativePasses(JsonObject manifest, String key, ShaderSourceLoader loader, String overlay)
+            throws IOException {
+        if (!manifest.has(key)) return List.of();
+        var files = manifest.getAsJsonArray(key);
+        int limit = key.equals("worldPasses") ? 16 : 8;
+        if (files.size() > limit) throw new IOException(key + " supports at most " + limit + " passes");
+        var result = new ArrayList<NativePass>();
+        for (var file : files) {
+            String name;
+            boolean hdr = false;
+            List<String> condition = List.of();
+            List<String> outputs = List.of();
+            boolean compute = false;
+            if (file.isJsonObject()) {
+                var program = file.getAsJsonObject();
+                name = program.get("file").getAsString();
+                if (program.has("outputs") || program.has("compute")) {
+                    if (!key.equals("worldPasses")) throw new IOException("outputs and compute require a world pass");
+                    if (program.has("outputs")) {
+                        var list = new ArrayList<String>();
+                        for (var output : program.getAsJsonArray("outputs")) list.add(output.getAsString());
+                        if (list.isEmpty()) throw new IOException(name + ": outputs requires at least one target");
+                        outputs = list;
+                    }
+                    compute = flag(program, "compute");
+                }
+                String target = program.has("target") ? program.get("target").getAsString() : "rgba8";
+                if (!target.equals("rgba8") && !target.equals("rgba16f"))
+                    throw new IOException("Unsupported pass target: " + target);
+                hdr = target.equals("rgba16f");
+                condition = conditionKeys(program, "whenAny");
+                if (!condition.isEmpty() && !key.equals("worldPasses")) throw new IOException("whenAny requires a world pass");
+            } else name = file.getAsString();
+            result.add(new NativePass(name, nativeSource(name, loader, overlay), hdr, condition, outputs, compute));
+        }
+        if (!result.isEmpty() && result.getLast().hdr()) throw new IOException("The final " + key + " pass must write rgba8");
+        if (!result.isEmpty() && !result.getLast().whenAny().isEmpty()) throw new IOException("The final world pass must be unconditional");
+        return result;
+    }
+
+    private static String nativeSource(String file, ShaderSourceLoader loader, String overlay) throws IOException {
+        if (!file.endsWith(".hlsl")) throw new IOException("Expected an HLSL file: " + file);
+        return loader.load(pick(loader, overlay, file));
+    }
+
+    public static void installNativeExample() throws IOException {
+        Path directory = ShaderPackFiles.directory();
+        Files.createDirectories(directory);
+        if (Files.isSymbolicLink(directory)) throw new IOException("Symbolic shaderpack directory");
+        Path pack = Files.createDirectory(directory.resolve("direct-example"));
+        for (String file : List.of(MANIFEST, "terrain.hlsl", "grade.hlsl", "final.hlsl", "geometry.hlsl")) {
+            try (var source = PackRepository.class.getResourceAsStream("/assets/raydiance/examples/direct_example/" + file)) {
+                if (source == null) throw new IOException("Missing example resource: " + file);
+                Files.copy(source, pack.resolve(file));
+            }
+        }
+    }
+
     private static String when(JsonObject o) throws IOException {
         String when=o.has("when")?o.get("when").getAsString():"";
         if(!when.isEmpty()&&!RANGES.containsKey(when)) throw new IOException("Unknown conditional option: "+when);

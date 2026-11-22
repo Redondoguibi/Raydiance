@@ -5,7 +5,8 @@ import org.lwjgl.system.MemoryStack;
 public final class GlState implements AutoCloseable {
     private final int read=GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING),draw=GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING),
         program=GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM),vao=GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING),active=GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-    private final int[] viewport=new int[4],textures=new int[UNITS];
+    private final int[] viewport = new int[4];
+    private final int[] textures;
     /** Texture units Raydiance programs may bind (FrameUniforms caps samplers per program at this count). */
     public static final int UNITS=16;
     private final boolean depth=GL11.glIsEnabled(GL11.GL_DEPTH_TEST),blend=GL11.glIsEnabled(GL11.GL_BLEND),
@@ -15,7 +16,12 @@ public final class GlState implements AutoCloseable {
     private final double clearDepth=GL11.glGetDouble(GL11.GL_DEPTH_CLEAR_VALUE);
     private final byte[] colorMask=new byte[4];
     private final float[] clearColor=new float[4];
-    public GlState(){
+    public GlState() {
+        this(UNITS);
+    }
+    /** Saves the consecutive texture units a pass may write, beginning at unit zero. */
+    GlState(int textureUnits) {
+        textures = new int[textureUnits];
         GL11.glGetIntegerv(GL11.GL_VIEWPORT,viewport);GL11.glGetFloatv(GL11.GL_COLOR_CLEAR_VALUE,clearColor);
         try(MemoryStack stack=MemoryStack.stackPush()){var mask=stack.malloc(4);GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK,mask);mask.get(colorMask);}
         for(int i=0;i<textures.length;i++){GL13.glActiveTexture(GL13.GL_TEXTURE0+i);textures[i]=GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);}

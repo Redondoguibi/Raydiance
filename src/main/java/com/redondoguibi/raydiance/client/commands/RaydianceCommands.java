@@ -61,19 +61,7 @@ public final class RaydianceCommands {
                         .then(Commands.literal("load")
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .executes(ctx -> packSelect(ctx, StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("backend")
-                                .then(Commands.argument("mode", StringArgumentType.word())
-                                        .executes(ctx -> packBackend(ctx, StringArgumentType.getString(ctx, "mode"))))))
-                .then(Commands.literal("shader")
-                        .executes(RaydianceCommands::shaderStatus)
-                        .then(Commands.literal("list").executes(RaydianceCommands::shaderList))
-                        .then(Commands.literal("install-example").executes(RaydianceCommands::installExample))
-                        .then(Commands.literal("status").executes(RaydianceCommands::shaderStatus))
-                        .then(Commands.literal("reload").executes(RaydianceCommands::shaderReload))
-                        .then(Commands.literal("off").executes(ctx -> shaderSelect(ctx, ShaderPackFiles.NONE)))
-                        .then(Commands.literal("load")
-                                .then(Commands.argument("name", StringArgumentType.word())
-                                        .executes(ctx -> shaderSelect(ctx, StringArgumentType.getString(ctx, "name")))))));
+                        .then(Commands.literal("install-example").executes(RaydianceCommands::installExample))));
     }
 
     private static int help(CommandContext<CommandSourceStack> ctx) {
@@ -81,8 +69,7 @@ public final class RaydianceCommands {
         say(ctx, "Colors: /raydiance set <saturation|contrast|brightness|exposure|gamma|temperature|vignette|strength> <number>");
         say(ctx, "Presets: /raydiance preset <default|warm|vibrant|cinematic>");
         say(ctx, "Fog: /raydiance fog <distance <0.25-3>|color <r> <g> <b>|color-off|reset|status>");
-        say(ctx, "Shaderpacks: /raydiance pack <list|load <name>|off|reload|status|backend <auto|direct|opengl>>");
-        say(ctx, "Direct-only HLSL: /raydiance shader <list|install-example|load <name>|off|reload|status>");
+        say(ctx, "Shaderpacks: /raydiance pack <list|load <name>|off|reload|status|install-example>");
         return Command.SINGLE_SUCCESS;
     }
 
@@ -104,7 +91,6 @@ public final class RaydianceCommands {
 
     private static int packReload(CommandContext<CommandSourceStack> ctx) {
         VisualPostProcessor.reload(true);
-        DirectShaderBridge.refresh();
         say(ctx, "Shaderpack reload requested.");
         return Command.SINGLE_SUCCESS;
     }
@@ -122,21 +108,7 @@ public final class RaydianceCommands {
         Config.OPENGL_PACK.set(name);
         Config.SPEC.save();
         VisualPostProcessor.reload(true);
-        DirectShaderBridge.refresh();
         say(ctx, "Selected shaderpack: " + name);
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private static int packBackend(CommandContext<CommandSourceStack> ctx, String mode) {
-        if (!mode.matches("auto|direct|opengl")) {
-            say(ctx, "Backend must be auto, direct or opengl.");
-            return 0;
-        }
-        Config.PACK_BACKEND.set(mode);
-        Config.SPEC.save();
-        VisualPostProcessor.reload(true);
-        DirectShaderBridge.refresh();
-        say(ctx, "Shaderpack backend: " + mode);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -217,55 +189,15 @@ public final class RaydianceCommands {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int shaderList(CommandContext<CommandSourceStack> ctx) {
-        try {
-            var packs = ShaderPackFiles.list();
-            say(ctx, "HLSL shader directory: " + ShaderPackFiles.directory());
-            say(ctx, packs.isEmpty() ? "No Raydiance HLSL files found." : "Available: " + String.join(", ", packs));
-            return Command.SINGLE_SUCCESS;
-        } catch (IOException exception) {
-            say(ctx, "Cannot list HLSL packs: " + exception.getMessage());
-            return 0;
-        }
-    }
-
     private static int installExample(CommandContext<CommandSourceStack> ctx) {
         try {
-            say(ctx, "Installed example HLSL shader at " + ShaderPackFiles.installExample());
-            say(ctx, "Use /raydiance shader load softwarm with Direct installed.");
+            com.redondoguibi.raydiance.client.shaders.PackRepository.installNativeExample();
+            say(ctx, "Installed shaderpack: direct-example");
             return Command.SINGLE_SUCCESS;
         } catch (IOException exception) {
-            say(ctx, "Cannot install example (existing files are not overwritten): " + exception.getMessage());
+            say(ctx, "Cannot install shaderpack example: " + exception.getMessage());
             return 0;
         }
-    }
-
-    private static int shaderSelect(CommandContext<CommandSourceStack> ctx, String name) {
-        try {
-            ShaderPackFiles.select(name);
-            Config.SPEC.save();
-            DirectShaderBridge.refresh();
-            say(ctx, "Selected Raydiance Direct HLSL shader: " + name
-                    + ". It only runs when a compatible Direct DX12 renderer is active.");
-            return Command.SINGLE_SUCCESS;
-        } catch (IOException exception) {
-            say(ctx, "Cannot select shader: " + exception.getMessage());
-            return 0;
-        }
-    }
-
-    private static int shaderReload(CommandContext<CommandSourceStack> ctx) {
-        DirectShaderBridge.refresh();
-        VisualPostProcessor.reload();
-        com.redondoguibi.raydiance.client.profile.DynamicProfiles.reload();
-        say(ctx, "Shader and post-processing reload requested.");
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private static int shaderStatus(CommandContext<CommandSourceStack> ctx) {
-        say(ctx, "Selected HLSL: " + ShaderPackFiles.selected());
-        say(ctx, DirectShaderBridge.status());
-        return Command.SINGLE_SUCCESS;
     }
 
     private static int status(CommandContext<CommandSourceStack> ctx) {

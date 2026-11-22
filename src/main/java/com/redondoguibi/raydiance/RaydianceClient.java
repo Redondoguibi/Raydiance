@@ -3,7 +3,6 @@ package com.redondoguibi.raydiance;
 import com.redondoguibi.raydiance.client.commands.RaydianceCommands;
 import com.redondoguibi.raydiance.client.render.VisualPostProcessor;
 import com.redondoguibi.raydiance.client.render.FogController;
-import com.redondoguibi.raydiance.compat.direct.DirectShaderBridge;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.ModContainer;
@@ -48,21 +47,18 @@ public final class RaydianceClient {
             }
             while(RELOAD.consumeClick()) {
                 VisualPostProcessor.reload(true);
-                DirectShaderBridge.refresh();
             }
             while(TOGGLE.consumeClick()) {
-                boolean enabled = !Config.ENABLE_EFFECTS.get();
-                Config.ENABLE_EFFECTS.set(enabled);
+                boolean enabled = !Config.ENABLE_DIRECT_INTEGRATION.get();
+                Config.ENABLE_DIRECT_INTEGRATION.set(enabled);
                 Config.SPEC.save();
-                DirectShaderBridge.refresh();
                 Minecraft.getInstance().gui.setOverlayMessage(Component.translatable(enabled ? "raydiance.pipeline.enabled" : "raydiance.pipeline.disabled"), false);
             }
         });
         NeoForge.EVENT_BUS.addListener(RaydianceCommands::register);
-        NeoForge.EVENT_BUS.addListener(DirectShaderBridge::onTick);
         NeoForge.EVENT_BUS.addListener(FogController::distance);
         NeoForge.EVENT_BUS.addListener(FogController::color);
-        Raydiance.LOGGER.info("Raydiance initialized: pipeline manager with OpenGL and optional Direct DX12 backends.");
+        Raydiance.LOGGER.info("Raydiance initialized: Standalone OpenGL and Direct DX12 shaderpacks.");
     }
 
     private void reloadListeners(RegisterClientReloadListenersEvent event) {

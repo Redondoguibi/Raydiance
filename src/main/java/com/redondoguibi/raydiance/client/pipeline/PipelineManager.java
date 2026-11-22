@@ -7,150 +7,162 @@ import com.redondoguibi.raydiance.client.render.GlPipeline;
 import com.redondoguibi.raydiance.client.render.GlState;
 import com.redondoguibi.raydiance.client.shaders.*;
 import com.redondoguibi.raydiance.compat.direct.DirectCompatibility;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import java.util.*;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+import java.util.Map;
 
-/**
- * Owns the active {@link ShaderPipeline} (compare Iris' PipelineManager).
- *
- * <p>Pack data (manifest, sources, options) loads without GL, so menus can edit a pack even when it fails to
- * compile. The pipeline is rebuilt whenever its key changes: pack, dimension, language, backend, define values,
- * quality or a reload. A failed build never replaces a working pipeline of the same pack; a failing different pack
- * leaves nothing running, and the error is reported once in chat.</p>
- */
+/** Selects either the standalone effects or the selected Direct shaderpack before world draws. */
 public final class PipelineManager {
     private static ShaderPipeline pipeline;
-    private static String pipelineKey,failedKey,packKey,rejectedKey;
-    private static PackRepository.Pack pack=PackRepository.NONE;
-    private static String packError="",buildError="";
-    private static int generation;
-    private static boolean announce,directWorldPost;
-    private static BackendSelector.Decision decision=new BackendSelector.Decision(BackendSelector.Choice.NONE,"");
+    private static String pipelineKey, failedKey, packKey;
+    private static PackRepository.Pack pack = PackRepository.NONE;
+    private static String packError = "", buildError = "", status = "";
+    private static int generation, loadedGeneration = -1;
+    private static String loadedId, loadedLanguage;
+    private static ResourceKey<Level> loadedDimension;
+    private static String standalonePipelineKey = "standalone|0";
+    private static Map<String,String> defines = Map.of();
+    private static String definesPackKey, nativePipelineKey;
+    private static long definesRevision = -1;
+    private static boolean announce, directAvailable;
 
-    public static boolean packSelected(){return !"none".equals(Config.OPENGL_PACK.get());}
-    public static PackBackend backend(){return PackBackend.parse(Config.PACK_BACKEND.get());}
-    /** Called every client tick: cheap reflection probes stay out of the frame loop. */
-    public static void tick(){
-        ensurePack();
-        directWorldPost=DirectCompatibility.worldPostAvailable()&&!Minecraft.useShaderTransparency();
+    private PipelineManager() {}
+
+    public static boolean packSelected() { return !"none".equals(Config.OPENGL_PACK.get()); }
+    public static boolean shadersRequested() { return BackendSelector.shadersRequested(packSelected(), Config.ENABLE_DIRECT_INTEGRATION.get()); }
+    public static boolean standaloneActive() { return BackendSelector.standaloneActive(shadersRequested(), Config.ENABLE_EFFECTS.get()); }
+    public static int quality() { return Config.QUALITY.get(); }
+    public static boolean fxaa() { return Config.FXAA.get(); }
+
+    public static void tick() {
+        directAvailable = shadersRequested() && DirectCompatibility.worldPostAvailable() && !Minecraft.useShaderTransparency();
     }
-    private static String dimension(){
-        var level=Minecraft.getInstance().level;
-        return level==null?PackRepository.LoadContext.DEFAULT.dimension():level.dimension().location().toString();
-    }
-    private static String language(){
-        try{return Minecraft.getInstance().getLanguageManager().getSelected();}catch(RuntimeException ex){return "en_us";}
-    }
-    private static void ensurePack(){
-        String id=Config.OPENGL_PACK.get(),dimension=dimension(),language=language();
-        String key=id+"|"+dimension+"|"+language+"|"+generation;
-        if(key.equals(packKey))return;
-        packKey=key;
-        if("none".equals(id)){pack=PackRepository.NONE;packError="";PackRepository.accept(pack);return;}
-        try{
-            var loaded=PackRepository.load(id,new PackRepository.LoadContext(dimension,language));
-            PackOptionStore.live().prepare(loaded);
-            pack=loaded;packError="";PackRepository.accept(loaded);
-        }catch(Exception ex){
-            pack=PackRepository.NONE;PackRepository.accept(pack);PackRepository.reject(ex);
-            packError=ex.getMessage()==null?ex.toString():ex.getMessage();
-            Raydiance.LOGGER.error("Cannot load shaderpack {}",id,ex);
-            report(Component.translatable("raydiance.pipeline.loadFailed",id,ShaderErrors.summary(packError,2)));
+
+    private static void ensurePack() {
+        var mc = Minecraft.getInstance();
+        ResourceKey<Level> dimension = mc.level == null ? Level.OVERWORLD : mc.level.dimension();
+        String language = mc.getLanguageManager().getSelected();
+        String id = Config.OPENGL_PACK.get();
+        if (generation == loadedGeneration && id.equals(loadedId) && dimension.equals(loadedDimension)
+                && language.equals(loadedLanguage)) return;
+        loadedGeneration = generation;
+        loadedId = id;
+        loadedDimension = dimension;
+        loadedLanguage = language;
+        String dimensionName = dimension.location().toString();
+        packKey = id + "|" + dimensionName + "|" + language + "|" + generation;
+        try {
+            pack = PackRepository.load(id, new PackRepository.LoadContext(dimensionName, language));
+            if (!pack.none()) {
+                if (!pack.canRunDirect()) throw new java.io.IOException("Shaderpack requires a format 4 manifest and HLSL programs");
+                PackOptionStore.live().prepare(pack);
+            }
+            packError = "";
+        } catch (Exception ex) {
+            pack = PackRepository.NONE;
+            packError = ShaderErrors.summary(ex.getMessage(), 4);
+            Raydiance.LOGGER.warn("Cannot load shaderpack {}", id, ex);
         }
+        PackRepository.accept(pack);
     }
-    /** The loaded selected pack, or {@link PackRepository#NONE}. */
-    public static PackRepository.Pack pack(){ensurePack();return pack;}
-    public static boolean packReady(){ensurePack();return packSelected()&&!pack.none();}
-    /** Effective engine value of the selected pack (cached pack; refreshed by tick/render/menus). */
-    public static double value(String key){return PackOptionStore.live().engine(pack,key);}
-    public static int quality(){return packSelected()&&!pack.none()?PackOptionStore.live().quality(pack):Config.QUALITY.get();}
-    public static boolean fxaa(){return packSelected()&&!pack.none()?PackOptionStore.live().fxaa(pack):Config.FXAA.get();}
 
-    static BackendSelector.Decision decide(){
+    public static PackRepository.Pack pack() { ensurePack(); return pack; }
+    public static boolean packReady() { return !pack().none(); }
+    public static String reason() { return status; }
+
+    public static void prepareFrame(float partialTicks) {
         ensurePack();
-        return BackendSelector.decide(new BackendSelector.Inputs(Config.ENABLE_EFFECTS.get(),packSelected(),!pack.none(),backend(),
-                Config.ENABLE_DIRECT_INTEGRATION.get(),directWorldPost,pack.canRunDirect(),pack.canRunOpenGl(),
-                Objects.equals(rejectedKey,pack.id()+"|"+generation)));
-    }
-    public static BackendSelector.Decision decision(){return decision;}
-    /** True while the selected pack executes on Direct DX12 (geometry requests, fog and terrain then belong to Direct). */
-    public static boolean directActive(){return pipeline!=null&&pipeline.kind()==ShaderPipeline.Kind.DIRECT&&decision.choice()==BackendSelector.Choice.DIRECT;}
-    public static boolean wantsOpaqueDepth(){return pipeline!=null&&pipeline.wantsOpaqueDepth();}
-
-    /** Render thread, after the level and before hand/GUI. */
-    public static void render(float partialTicks){
-        decision=decide();
-        var choice=decision.choice();
-        if(choice==BackendSelector.Choice.NONE){close();return;}
-        boolean direct=choice==BackendSelector.Choice.DIRECT;
-        var target=choice==BackendSelector.Choice.BUILTIN?PackRepository.NONE:pack;
-        Map<String,String> defines=target.none()?Map.of():PackOptionStore.live().defineValues(target);
-        int quality=quality();
-        String key=choice+"|"+packKey+"|"+defines+"|"+quality;
-        if(!key.equals(pipelineKey)&&!key.equals(failedKey))build(key,target,direct,defines,quality);
-        if(pipeline==null)return;
-        pipeline.render(partialTicks);
-        if(pipeline.rejected()&&!Objects.equals(rejectedKey,pack.id()+"|"+generation)){
-            rejectedKey=pack.id()+"|"+generation;
-            report(Component.translatable("raydiance.pipeline.directRejected",pack.title(),ShaderErrors.summary(pipeline.status(),2)));
-        }
-    }
-    private static void build(String key,PackRepository.Pack target,boolean direct,Map<String,String> defines,int quality){
-        var macros=ShaderMacros.standard(direct?"dx12":"opengl",quality,dimension(),target.format());
-        long start=System.nanoTime();
-        ShaderPipeline candidate=null;
-        try(GlState state=new GlState()){
-            candidate=direct?new DirectPipeline(target,macros,defines):new GlPipeline(target,macros,defines);
-        }catch(Exception ex){
-            failedKey=key;buildError=ex.getMessage()==null?ex.toString():ex.getMessage();
-            Raydiance.LOGGER.error("Rejected Raydiance pipeline for {}; {}",target.id(),pipeline!=null&&pipeline.pack().id().equals(target.id())?"keeping the previous one":"nothing will run",ex);
-            if(pipeline!=null&&!pipeline.pack().id().equals(target.id()))close();
-            report(Component.translatable("raydiance.pipeline.failed",target.none()?"Raydiance":target.title(),ShaderErrors.summary(buildError,4)));
-            announce=false;
+        boolean nativePack = shadersRequested();
+        String blocked = nativePack ? packBlocker() : standaloneActive() ? "" : "Standalone disabled";
+        if (!blocked.isEmpty()) {
+            close();
+            status = blocked;
             return;
         }
-        close();
-        pipeline=candidate;pipelineKey=key;failedKey=null;buildError="";
-        if(announce){
-            announce=false;
-            var mc=Minecraft.getInstance();
-            mc.gui.setOverlayMessage(Component.translatable("raydiance.pipeline.reloaded",target.none()?"Raydiance":target.title(),
-                    direct?"Direct DX12":"OpenGL",(System.nanoTime()-start)/1_000_000),false);
+        var target = nativePack ? pack : PackRepository.NONE;
+        if (nativePack) {
+            var store = PackOptionStore.live();
+            if (!packKey.equals(definesPackKey) || definesRevision != store.revision()) {
+                defines = store.defineValues(pack);
+                definesPackKey = packKey;
+                definesRevision = store.revision();
+                nativePipelineKey = packKey + "|" + defines;
+            }
+        }
+        String key = nativePack ? nativePipelineKey : standalonePipelineKey;
+        if (!key.equals(pipelineKey) && !key.equals(failedKey)) {
+            close();
+            try {
+                var mc = Minecraft.getInstance();
+                if (nativePack) {
+                    var macros = ShaderMacros.standard("dx12", 1, mc.level.dimension().location().toString(), target.format());
+                    pipeline = new DirectPipeline(target, macros, defines);
+                } else {
+                    try (GlState state = new GlState()) {
+                        pipeline = new GlPipeline();
+                    }
+                }
+                pipelineKey = key;
+                failedKey = null;
+                buildError = "";
+                if (announce) {
+                    announce = false;
+                    mc.gui.setOverlayMessage(Component.literal(nativePack ? target.title() : "Raydiance Standalone"), false);
+                }
+            } catch (Exception | LinkageError ex) {
+                failedKey = key;
+                buildError = ShaderErrors.summary(ex.getMessage(), 5);
+                Raydiance.LOGGER.error("Cannot prepare Raydiance pipeline", ex);
+            }
+        }
+        if (pipeline instanceof DirectPipeline direct) direct.prepareTerrain(partialTicks);
+        status = pipeline == null ? buildError : pipeline.status();
+    }
+
+    private static String packBlocker() {
+        if (pack.none()) return packError.isEmpty() ? "Shaderpack unavailable" : packError;
+        if (!pack.canRunDirect()) return "This shaderpack needs a format 4 manifest and HLSL programs";
+        if (!directAvailable) return "Requires Direct 1.8+, DX12 terrain replacement and Fast/Fancy graphics";
+        return "";
+    }
+
+    public static void render(float partialTicks) {
+        if (pipeline == null) return;
+        pipeline.render(partialTicks);
+        status = pipeline.status();
+        if (pipeline.rejected()) {
+            failedKey = pipelineKey;
+            buildError = status;
+            close();
         }
     }
-    private static void report(Component message){
-        var mc=Minecraft.getInstance();
-        if(mc.player!=null)mc.gui.getChat().addMessage(Component.literal("[Raydiance] ").withStyle(ChatFormatting.GOLD).append(message.copy().withStyle(ChatFormatting.RED)));
-    }
-    private static void close(){
-        if(pipeline==null)return;
-        try(GlState state=new GlState()){pipeline.close();}
-        pipeline=null;pipelineKey=null;
-    }
-    /** No world: release GPU resources, like Iris destroying its pipeline on world unload. */
-    public static void idle(){if(pipeline!=null){close();}}
-    public static void releaseTargets(){if(pipeline!=null)try(GlState state=new GlState()){pipeline.releaseTargets();}}
-    /** Re-reads pack files and recompiles; {@code announce} shows the result (reload key, command, menu). */
-    public static void reload(boolean announce){
-        generation++;failedKey=null;rejectedKey=null;buildError="";PipelineManager.announce=announce;
-    }
-    public static void shutdown(){close();}
 
-    public static String status(){
-        StringBuilder s=new StringBuilder();
-        var choice=decision.choice();
-        s.append(packSelected()?"Pack: "+(pack.none()?Config.OPENGL_PACK.get():pack.title()+" (format "+pack.format()+")"):"Pack: none (built-in effects)");
-        s.append("\nBackend: ").append(backend().id()).append(" -> ").append(switch(choice){
-            case DIRECT->"Direct DX12";case OPENGL->"OpenGL";case BUILTIN->"OpenGL built-in";case NONE->"paused";});
-        if(!decision.reason().isEmpty())s.append("\n").append(decision.reason());
-        if(pipeline!=null)s.append("\n").append(pipeline.status());
-        if(!packError.isEmpty())s.append("\nLoad error: ").append(ShaderErrors.summary(packError,3));
-        if(!buildError.isEmpty())s.append("\nCompile error: ").append(ShaderErrors.summary(buildError,6));
-        long defines=pack.shaderOptions().stream().filter(ShaderOption::define).count();
-        if(defines>0)s.append("\n").append(defines).append(" #define options");
-        return s.toString();
+    private static void close() {
+        if (pipeline == null) return;
+        if (pipeline.kind() == ShaderPipeline.Kind.DIRECT) pipeline.close();
+        else try (GlState state = new GlState()) { pipeline.close(); }
+        pipeline = null;
+        pipelineKey = null;
     }
-    private PipelineManager(){}
+
+    public static void idle() { close(); }
+    public static void releaseTargets() {
+        if (pipeline != null && pipeline.kind() == ShaderPipeline.Kind.OPENGL)
+            try (GlState state = new GlState()) { pipeline.releaseTargets(); }
+    }
+    public static void reload(boolean announce) {
+        generation++;
+        standalonePipelineKey = "standalone|" + generation;
+        failedKey = null;
+        buildError = "";
+        PipelineManager.announce = announce;
+    }
+    public static void shutdown() { close(); }
+    public static String status() {
+        ensurePack();
+        return "Pack: " + (pack.none() ? Config.OPENGL_PACK.get() : pack.title())
+                + "\n" + (packError.isEmpty() ? status : packError);
+    }
 }

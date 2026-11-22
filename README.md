@@ -1,4 +1,10 @@
-# Raydiance 1.7.0
+# Raydiance 1.8.0
+
+Raydiance Standalone uses OpenGL effects with its own enable switch and profiles. Shaderpacks use Direct 1.8.0 or newer with DX12 terrain replacement enabled. In F8 > Shaderpacks, select a pack and open its options by folder. The included example is available from Shaderpacks > Library.
+
+Format 4 packs declare their own options, geometry shaders and ordered HLSL passes in one manifest. See [the shaderpack authoring guide](docs/shaderpacks-1.8.md).
+
+## Previous versions
 
 1.7.0 rebuilds the shader system around an Iris-inspired pipeline manager (see [Shader pipeline 1.7](#shader-pipeline-17)): selected packs run on Direct DX12 or OpenGL according to an explicit backend setting, format 3 adds Iris-style `composite*`/`final` programs over `colortex0-7`, and options can be declared as `#define`s in the pack source. Compatibility with Iris/OptiFine shaderpacks is not a goal.
 

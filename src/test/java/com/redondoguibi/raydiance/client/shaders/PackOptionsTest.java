@@ -31,9 +31,9 @@ class PackOptionsTest {
         store.save(pack);assertEquals("",store.error(pack));
     }
     @Test void ignoresRemovedOptionsAndClampsValuesWhenPackBoundsChange() throws Exception {
-        Files.writeString(directory.resolve("lus.json"),"{\"format\":1,\"values\":{\"sky\":6,\"removed\":9}}");
+        Files.writeString(directory.resolve("lus.json"),"{\"format\":1,\"values\":{\"sky\":6,\"removed\":9,\"engine.quality\":2}}");
         var store=new PackOptionStore(directory);var pack=pack("lus");store.prepare(pack);
-        assertEquals(Map.of("sky",1.0,"engine.quality",1.0,"engine.fxaa",0.0),store.snapshot(pack));
+        assertEquals(Map.of("sky",1.0),store.snapshot(pack));
     }
     @Test void rejectsReservedUniformNamesAndDuplicateControls() {
         assertThrows(IllegalArgumentException.class,()->new ShaderOption("sky","Sky","Sky","","Scene",ShaderOption.Kind.NUMBER,0,1,.1,.5));

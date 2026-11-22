@@ -64,7 +64,7 @@ public final class DirectCompatibility {
             Object capabilities = serviceType.getMethod("capabilities").invoke(service);
             if (!(Boolean) capabilities.getClass().getMethod("nativeTerrain").invoke(capabilities)) return false;
             var features = (java.util.Set<?>) serviceType.getMethod("terrainFeatures").invoke(service);
-            return features.contains("world-post-v1");
+            return features.contains("world-post-v1") && features.contains("pack-geometry-v1");
         } catch (ReflectiveOperationException | LinkageError | SecurityException | ClassCastException exception) {
             return false;
         }
